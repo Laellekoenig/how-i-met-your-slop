@@ -211,6 +211,23 @@ export class Director {
     return this.inside(shot.pos) && this.covers(shot, actors) && this.hasBackdrop(shot);
   }
 
+  /** How far out to the side of the picture (0 is its middle) the nearest head between the lens and the subject
+   *  is; Infinity when there's nobody in the way, or only at the very edge of the frame. */
+  private foreground(shot: Framing, subject: Actor) {
+    const cam = this.probe(shot.pos, shot.target, shot.fov);
+    const near = subject.headWorld.distanceTo(shot.pos) - 0.25;
+    let side = Infinity;
+    for (const id of this.stage.onStageIds()) {
+      const o = this.stage.actors[id];
+      if (o === subject || !o.root.visible) continue;
+      const head = o.headWorld;
+      if (head.distanceTo(shot.pos) > near) continue;
+      const v = head.project(cam);
+      if (v.z > -1 && v.z < 1 && Math.abs(v.x) < 0.85 && Math.abs(v.y) < 1) side = Math.min(side, Math.abs(v.x));
+    }
+    return side;
+  }
+
   /** Nothing in the way of someone's face from here: their head, and down to their chin. */
   private sees(from: THREE.Vector3, a: Actor) {
     const head = a.headWorld;
@@ -296,18 +313,23 @@ export class Director {
     // On an open set, someone facing upstage has no reverse: their single is a profile from the side.
     const profiles = this.stage.current.openSide
       ? [1.57, -1.57, 1.8, -1.8].map((angle) => forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle)) : [];
+    const single = (shot: Framing) => this.cut({ kind: 'closeup', ...shot, follow: a, followOffset: new THREE.Vector3(0, -0.16, 0),
+      push: pushIn ? 0.32 : 0, pushFor: pushIn ? 6 : undefined, subject: id, subjects: [id] });
+    // Somebody else's head in the picture, between the lens and the subject: keep looking for a clean angle, and
+    // if there isn't one, settle for the angle that keeps their head furthest out to the side.
+    let dirty: Framing | null = null, margin = -1;
     for (const [ds, minDot] of [[candidates, 0.05], [profiles, -0.25]] as const) for (const dist of dists) for (const d of ds) {
       if (d.lengthSq() < 0.1 || d.dot(forward) < minDot) continue;
       const pos = head.clone().addScaledVector(d, dist);
       pos.y = head.y + 0.08;
       const target = head.clone().add(new THREE.Vector3(0, -0.16, 0));
       const fov = pushIn ? 34 : dist < 0.7 ? 60 : dist < 1 ? 50 : dist < 1.5 ? 44 : 32;
-      if (this.usable({ pos, target, fov }, [a])) {
-        this.cut({ kind: 'closeup', pos, target, fov, follow: a, followOffset: new THREE.Vector3(0, -0.16, 0),
-          push: pushIn ? 0.32 : 0, pushFor: pushIn ? 6 : undefined, subject: id, subjects: [id] });
-        return;
-      }
+      const shot = { pos, target, fov }, side = this.foreground(shot, a);
+      if (side <= margin || !this.usable(shot, [a])) continue;
+      if (side === Infinity) return single(shot);
+      dirty = shot; margin = side;
     }
+    if (dirty) return single(dirty);
     if (pushIn) return this.closeup(id, toward);
     this.coverage([id], false);
   }

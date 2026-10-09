@@ -67,6 +67,11 @@ const previews = {
     ['ted', 'table_left'],
     ['robin', 'table_right'],
   ],
+  elevator: [
+    ['ted', 'center'],
+    ['robin', 'buttons'],
+    ['barney', 'left'],
+  ],
   lusty_leopard: [
     ['barney', 'table_left'],
     ['quinn', 'table_right'],
