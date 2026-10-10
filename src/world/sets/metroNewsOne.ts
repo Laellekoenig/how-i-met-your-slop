@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cyl, glow, mesh, occluder, roundedBox, toon } from '../../engine/materials';
+import { box, cyl, dressing, glow, mesh, occluder, roundedBox, toon } from '../../engine/materials';
 import { metroNewsBackdrop, metroNewsLogo, monitorScreen, tiles, veneer } from '../../engine/textures';
 import { door, keyLight, mark, nodes, plant, room, type StageSet, v3 } from './common';
 import { chair, label, mug } from './furnishings';
@@ -52,7 +52,7 @@ export function buildMetroNewsOne(): StageSet {
     c.add(mesh(box(0.62, 0.36, 0.06), black, 0, 1.2, -0.47, false));
     c.add(mesh(new THREE.PlaneGeometry(0.37, 0.25), toon('#ffffff', { map: monitorScreen(152), emissive: '#ffffff', emissiveIntensity: 0.4 }), 0, 1.52, 0.331, false));
     c.add(mesh(box(0.1, 0.045, 0.06), glow('#f74c40'), 0, 1.72, -0.1, false));
-    g.add(c);
+    g.add(dressing(c));
   }
   for (const x of [-3.7, 0, 3.7]) {
     g.add(mesh(box(0.7, 0.18, 0.48), black, x, 3.55, -0.6, false));

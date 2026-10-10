@@ -87,6 +87,10 @@ export function buildBarneys(): StageSet {
   const daySky = toon('#ffffff', { map: skyline(false, 84), emissive: '#ffffff', emissiveIntensity: 0.8 });
   const backdrop = mesh(new THREE.PlaneGeometry(22, 9), nightSky, -1.5, 1.6, BACK - 7, false);
   g.add(backdrop);
+  // The skyline wraps round to the left, for a glance out of the terrace doors along the room (a single at the window).
+  const sideBackdrop = mesh(new THREE.PlaneGeometry(7.2, 9), nightSky, -12.5, 1.6, BACK - 3.5, false);
+  sideBackdrop.rotation.y = Math.PI / 2;
+  g.add(sideBackdrop);
 
   // ---- glazing: black frames, French doors with divided lites, vertical blinds ---------------
   const frameMat = black;
@@ -559,7 +563,7 @@ export function buildBarneys(): StageSet {
     background: [],
     setTime(t) {
       const night = t === 'night';
-      backdrop.material = night ? nightSky : daySky;
+      backdrop.material = sideBackdrop.material = night ? nightSky : daySky;
       hemi.intensity = night ? 1.1 : 1.9;
       key.intensity = night ? 1.3 : 2.1;
       windowLight.color.set(night ? '#7a9aff' : '#fff2e0');

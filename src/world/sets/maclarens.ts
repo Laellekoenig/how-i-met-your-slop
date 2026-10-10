@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, glow, box, mesh, roundedBox, cyl, occluder } from '../../engine/materials';
+import { toon, glow, box, mesh, roundedBox, cyl, occluder, dressing } from '../../engine/materials';
 import { planks, paneling, brick, sign, skyline, stripes, mural, paneGlass, glassBlock, neonShamrock, pubPrint, chalkMenu } from '../../engine/textures';
 import { type StageSet, mark, nodes, room, band, frame, door, bottles, keyLight, v3 } from './common';
 
@@ -260,13 +260,14 @@ export function buildMaclarens(): StageSet {
   g.add(mesh(box(RIGHT - barX + 0.3, 0.06, 0.06), brass, (RIGHT + barX - 0.4) / 2, 0.12, barZ1 + 0.06, false));
   // taps
   for (let i = 0; i < 4; i++) {
-    g.add(mesh(cyl(0.02, 0.02, 0.25, 4), toon('#c9c9c9'), barX + 0.1, 1.24, -2.0 + i * 0.12, false));
-    g.add(mesh(box(0.04, 0.09, 0.02), toon(['#c9a227', '#7a2e1f', '#2e4a6b', '#3d6b2e'][i]), barX + 0.1, 1.4, -2.0 + i * 0.12, false));
+    g.add(dressing(mesh(cyl(0.02, 0.02, 0.25, 4), toon('#c9c9c9'), barX + 0.1, 1.24, -2.0 + i * 0.12, false)));
+    g.add(dressing(mesh(box(0.04, 0.09, 0.02), toon(['#c9a227', '#7a2e1f', '#2e4a6b', '#3d6b2e'][i]), barX + 0.1, 1.4, -2.0 + i * 0.12, false)));
   }
-  // banker's lamp, pints left on the bar
-  g.add(mesh(cyl(0.06, 0.07, 0.02, 6), brass, barX + 0.1, 1.125, -0.15, false));
-  g.add(mesh(cyl(0.012, 0.012, 0.22, 4), brass, barX + 0.1, 1.23, -0.15, false));
-  g.add(mesh(roundedBox(0.14, 0.08, 0.26, 0.03), glow('#3fae5c', 1.2), barX + 0.06, 1.36, -0.15, false));
+  // banker's lamp up at the far end, out of the way of the stools' singles; pints left on the bar
+  const lampZ = barZ0 + 0.2;
+  g.add(dressing(mesh(cyl(0.06, 0.07, 0.02, 6), brass, barX + 0.1, 1.125, lampZ, false)));
+  g.add(dressing(mesh(cyl(0.012, 0.012, 0.22, 4), brass, barX + 0.1, 1.23, lampZ, false)));
+  g.add(dressing(mesh(roundedBox(0.14, 0.08, 0.26, 0.03), glow('#3fae5c', 1.2), barX + 0.06, 1.36, lampZ, false)));
   pint(barX - 0.12, 1.115, -1.2);
   pint(barX - 0.1, 1.115, -2.55);
   // high-backed wooden stools with black seats

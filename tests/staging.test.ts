@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { testStage } from './helpers/sets';
 import { walkingBlockers } from './helpers/geometry';
 import { routeNodes } from '../src/show/navigation';
-import { Director } from '../src/show/director';
+import { Director, MAX_CLUTTER, MIN_SHOT } from '../src/show/director';
 import type { Actor } from '../src/world/actor';
 import { isCharacterId, isKid, type CharacterId } from '../src/script/types';
 import { SCRIPTS } from './helpers/episodes';
@@ -545,6 +545,160 @@ describe('camera coverage on the current sets', () => {
     expect(director.current!.pos.distanceTo(settled)).toBeLessThan(0.001);
     expectVisible(stage.actors.ted, 'held closeup');
   });
+
+  test('once someone is out the door, no shot stays on them: the one left behind gets their single', async () => {
+    director.minShot = MIN_SHOT;
+    try {
+      for (const [set, mark, toDoor] of [['apartment', 'dining_chair_1', false], ['apartment', 'dining_chair_1', true], ['barneys_office', 'desk_chair', false]] as const) {
+        stage.setWardrobe([]);
+        stage.setLocation(set, 'night');
+        stage.place('lily', mark); stage.place('mickey', 'center');
+        director.fresh();
+        if (toDoor) {
+          // walked to the door first, followed in a single, then out
+          const walk = stage.moveTo('mickey', stage.current.door);
+          director.closeup('mickey', 'lily');
+          for (let tick = 0; tick < 300 && stage.actors.mickey.isWalking; tick++) {
+            stage.update(1 / 30, tick / 30); director.update(1 / 30); await Promise.resolve();
+          }
+          await walk;
+        } else director.closeup('mickey', 'lily');
+        const out = stage.exit('mickey');
+        director.wide(0);
+        let gone = -1;
+        for (let tick = 0; tick < 600 && (gone < 0 || tick - gone < 90); tick++) {
+          // (as in the show: the walk's next step settles between frames, then a frame is staged, shot and drawn)
+          for (let i = 0; i < 4; i++) await Promise.resolve();
+          stage.update(1 / 30, tick / 30); director.update(1 / 30);
+          const shot = director.current!;
+          if (stage.onStage('mickey')) {
+            // watched going from a wide, never chased to the door in a single
+            expect(shot.subject === 'mickey' && shot.kind !== 'wide', `${set}: chased mickey out`).toBe(false);
+            continue;
+          }
+          if (gone < 0) gone = tick;
+          expect(shot.subjects ?? [], `${set}: framed on mickey after he left`).not.toContain('mickey');
+          if (shot.kind !== 'wide') expect(shot.subject, `${set}: framed on mickey after he left`).not.toBe('mickey');
+        }
+        await out;
+        expect(gone, `${set}: mickey never left`).toBeGreaterThan(0);
+        expect(director.current!.kind, set).toBe('closeup');
+        expect(director.current!.subject, set).toBe('lily');
+        expectVisible(stage.actors.lily, `${set}: lily left behind`);
+      }
+    } finally {
+      director.minShot = 0;
+    }
+  });
+
+  test('a shot left on someone who has gone is replaced at once, and a group left behind stays in frame', () => {
+    stage.setWardrobe([]);
+    stage.setLocation('barneys_office', 'night');
+    stage.place('lily', 'desk_chair'); stage.place('marshall', 'guest_chair_left'); stage.place('arthur', 'center');
+    director.fresh();
+    director.closeup('arthur');
+    stage.leave('arthur');
+    director.update(1 / 30);
+    expect(director.current!.subjects ?? []).not.toContain('arthur');
+    for (const id of ['lily', 'marshall'] as const) expectVisible(stage.actors[id], `${id} after arthur left`);
+  });
+
+  test('a single is never shot past a plant or a studio camera filling the foreground', () => {
+    stage.setWardrobe([]);
+    // a lens out in front of the camera operator, with the studio camera body between: the face is clear, the
+    // picture isn't
+    stage.setLocation('metro_news_one', 'night'); stage.place('lily', 'camera_operator');
+    const lily = stage.actors.lily, head = lily.headWorld;
+    const front = new THREE.Vector3(Math.sin(lily.facing), 0, Math.cos(lily.facing));
+    const blocked = { pos: head.clone().addScaledVector(front, 2.35).add(new THREE.Vector3(0, 0.08, 0)), target: head.clone().add(new THREE.Vector3(0, -0.16, 0)), fov: 32 };
+    expect(director.clutter(blocked, lily)).toBeGreaterThan(MAX_CLUTTER);
+    // and every mark's single on every set (bar the cabins) keeps clear of the dressing
+    for (const set of Object.values(stage.sets)) {
+      if (set.cameraBounds) continue;
+      stage.setLocation(set.id, 'night');
+      const id = set.id === 'future' ? 'penny' : 'marshall';
+      for (const mark of Object.keys(set.marks)) {
+        stage.place(id, mark);
+        director.closeup(id);
+        if (director.current!.kind === 'closeup') expect(director.clutter(director.current!, stage.actors[id]), `${set.id}/${mark}`).toBeLessThanOrEqual(MAX_CLUTTER);
+      }
+    }
+    // Marshall at Barney's office window, and Lily at the studio camera, still get their singles
+    for (const [set, id, mark] of [['barneys_office', 'marshall', 'window'], ['metro_news_one', 'lily', 'camera_operator']] as const) {
+      stage.setLocation(set, 'night'); stage.place(id, mark);
+      director.closeup(id);
+      expect(director.current!.kind, `${set}/${mark}`).toBe('closeup');
+    }
+  }, 30000);
+
+  test('side by side at the bar: singles from in front, nobody across the middle, two-shots from across the bar', () => {
+    stage.setWardrobe([]);
+    const marks = ['bar_stool_1', 'bar_stool_2', 'bar_stool_3', 'bar_stool_4', 'bar_standing'];
+    for (const a of marks) for (const b of marks) if (a !== b) {
+      stage.setLocation('maclarens', 'night');
+      stage.place('carl', 'behind_bar'); stage.place('lily', a); stage.place('robin', b);
+      const lily = stage.actors.lily, label = `lily at ${a}, robin at ${b}`;
+      const front = new THREE.Vector3(Math.sin(lily.facing), 0, Math.cos(lily.facing));
+      for (const shoot of [() => director.closeup('lily', 'robin'), () => director.overShoulder('lily', 'robin')]) {
+        shoot();
+        const shot = director.current!;
+        expectVisible(lily, label);
+        if (shot.kind === 'wide') continue;
+        camera.updateMatrixWorld();
+        // seen from the front half of her, never past the back of her head
+        expect(camera.position.clone().sub(lily.headWorld).setY(0).normalize().dot(front), label).toBeGreaterThan(-0.3);
+        expect(director.clutter(shot, lily), label).toBeLessThanOrEqual(MAX_CLUTTER);
+        // anyone between the lens and Lily stays out at the edge of frame (Robin's shoulder, for an over-the-shoulder)
+        for (const o of [stage.actors.robin, stage.actors.carl]) {
+          if (o.headWorld.distanceTo(camera.position) > lily.headWorld.distanceTo(camera.position)) continue;
+          const v = o.headWorld.project(camera);
+          if (v.z < 1 && Math.abs(v.y) < 1) expect(Math.abs(v.x), `${label}: ${o.def.id} in front`).toBeGreaterThan(0.5);
+        }
+      }
+      director.twoShot('lily', 'robin');
+      if (director.current!.kind === 'two') {
+        // their faces, not their backs
+        expect(camera.position.clone().sub(lily.headWorld).setY(0).normalize().dot(front), `${label}: two-shot`).toBeGreaterThan(-0.35);
+        for (const o of [lily, stage.actors.robin]) expectVisible(o, `${label}: two-shot`);
+      }
+    }
+    // the two on the middle stools get a two-shot from behind the bar, round the bartender
+    stage.setLocation('maclarens', 'night');
+    stage.place('carl', 'behind_bar'); stage.place('lily', 'bar_stool_2'); stage.place('robin', 'bar_stool_3');
+    director.twoShot('robin', 'lily');
+    expect(director.current!.kind).toBe('two');
+  }, 30000);
+
+  test('over the shoulder, the listener takes the edge of frame and the speaker the rest', () => {
+    stage.setWardrobe([]);
+    let shots = 0;
+    for (const set of ['maclarens', 'apartment', 'barneys', 'restaurant'] as const) {
+      // (the seats: where people sit and talk)
+      const marks = Object.entries(stage.sets[set].marks).filter(([, m]) => m.seat !== null).map(([name]) => name);
+      for (const a of marks) for (const b of marks) if (a !== b) {
+        stage.setLocation(set, 'night');
+        stage.place('ted', a); stage.place('barney', b);
+        director.overShoulder('ted', 'barney');
+        if (director.current!.kind !== 'ots') continue;
+        shots++;
+        camera.updateMatrixWorld();
+        const listener = stage.actors.barney.headWorld, v = listener.clone().project(camera);
+        const label = `${set}: ted at ${a}, barney at ${b}`;
+        // the back of Barney's head sits out at the side, not across the middle of the picture
+        expect(Math.abs(v.x), label).toBeGreaterThan(0.6);
+        expect(camera.position.distanceTo(listener), label).toBeGreaterThan(1.4);
+        expectVisible(stage.actors.ted, label);
+      }
+    }
+    expect(shots).toBeGreaterThan(30);
+    // across the MacLaren's booth table, both ways
+    for (const [a, b] of [['booth_left_front', 'booth_right_front'], ['booth_right_back', 'booth_left_back']]) {
+      stage.setLocation('maclarens', 'night');
+      stage.place('ted', a); stage.place('barney', b);
+      director.overShoulder('ted', 'barney');
+      expect(director.current!.kind, `${a} over ${b}`).toBe('ots');
+    }
+  }, 30000);
 
   test('placement updates head height and facing before selecting the first shot', () => {
     stage.setLocation('apartment', 'day'); stage.place('ted', 'couch_left');

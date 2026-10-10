@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { LocationId, TimeOfDay, CharacterId } from '../../script/types';
-import { toon, glow, box, mesh, roundedBox, cyl, occluder } from '../../engine/materials';
+import { toon, glow, box, mesh, roundedBox, cyl, occluder, dressing } from '../../engine/materials';
 import { hallway, painting } from '../../engine/textures';
 import type { SitPose } from '../actor';
 
@@ -352,13 +352,13 @@ export function bottles(g: THREE.Group, x0: number, y: number, z: number, count:
 }
 
 export function plant(g: THREE.Group, x: number, z: number, scale = 1) {
-  g.add(mesh(cyl(0.16 * scale, 0.12 * scale, 0.3 * scale, 8), toon('#8a4a2a'), x, 0.15 * scale, z));
+  g.add(dressing(mesh(cyl(0.16 * scale, 0.12 * scale, 0.3 * scale, 8), toon('#8a4a2a'), x, 0.15 * scale, z)));
   const leaf = toon('#3f7a3a');
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
     const l = mesh(box(0.08 * scale, 0.5 * scale, 0.02), leaf, x + Math.cos(a) * 0.08 * scale, 0.5 * scale, z + Math.sin(a) * 0.08 * scale);
     l.rotation.set(Math.sin(a) * 0.5, -a, Math.cos(a) * 0.5);
-    g.add(l);
+    g.add(dressing(l));
   }
 }
 

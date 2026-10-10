@@ -99,6 +99,10 @@ export class Stage {
   private doorTurns = 0;
   /** One at a time through each door: the next in line waits for whoever's going through. */
   private doorQueue = new Map<Door, Promise<void>>();
+  /** Who's on their way out (an exit under way); any other instruction for them calls it off. */
+  private outgoing = new Set<CharacterId>();
+  /** Who has gone out the door since the director last asked (see `takeExits`). */
+  private exited: CharacterId[] = [];
   /** A door shutting (for its sound). */
   onDoorShut: (() => void) | null = null;
 
@@ -290,6 +294,8 @@ export class Stage {
     this.backgroundIds.clear();
     this.doorWork.clear();
     this.doorQueue.clear();
+    this.outgoing.clear();
+    this.exited = [];
     for (const s of Object.values(this.sets)) for (const d of Object.values(s.doors ?? {})) d.reset();
     this.syncExtras();
   }
@@ -691,17 +697,35 @@ export class Stage {
     this.current = this.sets[id] ?? this.current;
   }
 
+  /** Someone walking out: still on stage, but heading for the door to leave. */
+  leaving(id: CharacterId) {
+    return this.outgoing.has(id) && this.onStage(id);
+  }
+
+  /** Who has walked out through the door since the last call: they're gone, and the room is the rest. */
+  takeExits() {
+    return this.exited.splice(0);
+  }
+
+  /** Out through the door and off the stage. */
+  private gone(id: CharacterId) {
+    this.outgoing.delete(id);
+    this.actors[id].root.visible = false;
+    this.occupy(id, null);
+    this.exited.push(id);
+  }
+
   async exit(id: CharacterId) {
     if (!this.onStage(id)) return;
     this.leaveDoor(id);
+    this.outgoing.add(id);
     const version = this.sceneVersion, door = this.entrance(this.actorMark.get(id));
     const swing = this.current.doors?.[door];
     if (swing) return this.throughDoor(id, swing, (turn) => this.goOut(id, swing, door, turn));
     await this.walkTo(id, door);
     // A skipped scene or a subsequent move must not let an old exit hide the new cast.
     if (version !== this.sceneVersion || this.actorMark.get(id) !== door) return;
-    this.actors[id].root.visible = false;
-    this.occupy(id, null);
+    this.gone(id);
   }
 
   /** Whether someone is in the middle of going through a door (and keeps to their own way meanwhile). */
@@ -721,6 +745,7 @@ export class Stage {
 
   /** Stop whatever they were doing at a door: let go of it, and it swings shut by itself. */
   private leaveDoor(id: CharacterId) {
+    this.outgoing.delete(id);
     const work = this.doorWork.get(id);
     if (!work) return;
     this.doorWork.delete(id);
@@ -792,8 +817,7 @@ export class Stage {
     await door.swing(0, 0.2);
     if (!still()) return;
     this.doneWithDoor(id);
-    a.root.visible = false;
-    this.occupy(id, null);
+    this.gone(id);
   }
 
   update(dt: number, t: number) {
