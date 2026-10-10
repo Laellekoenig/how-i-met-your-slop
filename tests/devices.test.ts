@@ -11,7 +11,8 @@ import { Player } from '../src/show/player';
 import { speech } from '../src/audio/speech';
 import { audio } from '../src/audio/audio';
 import { CHARACTERS } from '../src/world/characters';
-import type { Beat, EpisodeScript, ReplayBeat, Scene, ShowItem } from '../src/script/types';
+import { Actor } from '../src/world/actor';
+import type { Beat, CharacterId, EpisodeScript, ReplayBeat, Scene, ShowItem } from '../src/script/types';
 
 const spies: { mockRestore(): void }[] = [];
 afterEach(() => spies.splice(0).forEach((s) => s.mockRestore()));
@@ -454,5 +455,143 @@ describe('playback: time, memory and editing', () => {
     await r.run();
     expect(beds.filter((b) => b !== 'stop')).toEqual(['tense']);
     expect(beds.at(-1)).toBe('stop');
+  }, 60000);
+});
+
+describe('playback: devices on screen', () => {
+  test('each split-screen panel is framed for its own strip of the screen, with nobody cut off at the sides', async () => {
+    let held: THREE.PerspectiveCamera[] = [];
+    const r = rig([sceneItem(scene([{
+      type: 'split', panels: [
+        { location: 'apartment', time: 'night', cast: [{ character: 'marshall', mark: 'couch_left' }, { character: 'lily', mark: 'couch_right' }] },
+        { location: 'office', time: 'night', cast: [{ character: 'robin', mark: 'cubicle_1' }] },
+        { location: 'barneys', time: 'night', cast: [{ character: 'barney', mark: 'couch_left' }, { character: 'ted', mark: 'couch_right' }] },
+      ], beats: [say('robin', 'Is everyone hearing this?') as Beat],
+    }]))], {
+      speak: async () => { held = (r.renderer.panels as { camera: THREE.PerspectiveCamera }[]).map((p) => p.camera); },
+    });
+    await r.run();
+    expect(held).toHaveLength(3);
+    // as the renderer shows them: a third of the screen each
+    const panels: [string, [CharacterId, string][]][] = [
+      ['apartment', [['marshall', 'couch_left'], ['lily', 'couch_right']]], ['office', [['robin', 'cubicle_1']]], ['barneys', [['barney', 'couch_left'], ['ted', 'couch_right']]],
+    ];
+    for (const [i, camera] of held.entries()) {
+      const cam = camera.clone();
+      cam.aspect = 16 / 9 / 3;
+      cam.updateProjectionMatrix();
+      cam.updateMatrixWorld();
+      const [set, people] = panels[i];
+      r.stage.setLocation(set as Scene['location'], 'night');
+      for (const [id, mark] of people) {
+        r.stage.place(id, mark);
+        expect(Math.abs(r.stage.actors[id].headWorld.project(cam).x), `${id} in panel ${i + 1}`).toBeLessThan(0.9);
+      }
+    }
+  }, 60000);
+
+  test('a split-screen panel keeps its background people off the marks its cast took', () => {
+    const st = testStage();
+    st.setLocation('restaurant', 'night');
+    st.place('lily', 'host');
+    st.openPanel('barneys', 'night');
+    st.place('barney', 'couch_left');
+    st.update(1 / 30, 0);
+    const extra = (mark: string) => st.extras.find((e) => e.set === 'restaurant' && e.mark === mark)!.actor.root.visible;
+    // (the host would stand inside Lily)
+    expect(extra('host')).toBe(false);
+    expect(extra('service')).toBe(true);
+    st.setLocation('restaurant', 'night');
+    st.update(1 / 30, 0);
+    expect(extra('host')).toBe(true);
+  });
+
+  test('on a split-screen call, whoever is on the line keeps the phone up until it ends', async () => {
+    const calls: string[] = [];
+    const r = rig([sceneItem(scene([{
+      type: 'split', panels: [
+        { location: 'apartment', time: 'night', cast: [{ character: 'lily', mark: 'couch_left' }] },
+        { location: 'office', time: 'night', cast: [{ character: 'marshall', mark: 'cubicle_1' }] },
+      ], beats: [say('lily', 'Marshmallow?', { to: 'marshall', gesture: 'phone_call' }) as Beat, say('marshall', 'Lilypad.', { to: 'lily', gesture: 'phone_call' }) as Beat],
+    }]))]);
+    // (on the prototype: dressing Marshall for the office swaps in another actor for him)
+    const go = Actor.prototype.doGesture;
+    spies.push(spyOn(Actor.prototype, 'doGesture').mockImplementation(function (this: Actor, g, o) {
+      if (g === 'phone_call') calls.push(`${this.def.id}:${(o?.dur ?? 0) > 60 ? 'call' : 'line'}`);
+      return go.call(this, g, o);
+    }));
+    await r.run();
+    // both pick up as the split opens, before anyone speaks; their own lines carry on the same call
+    expect(calls.slice(0, 2).sort()).toEqual(['lily:call', 'marshall:call']);
+  }, 60000);
+
+  test('a voice down the phone is on whoever has the phone, with it at their ear', async () => {
+    const gestures: string[] = [];
+    const r = rig([sceneItem(scene([
+      { type: 'hold', character: 'ted', prop: 'phone' },
+      say('barney', 'Ted. Suit up.', { offscreen: 'phone' }) as Beat,
+    ]))]);
+    const go = Actor.prototype.doGesture;
+    spies.push(spyOn(Actor.prototype, 'doGesture').mockImplementation(function (this: Actor, g, o) {
+      if (this.def.id === 'ted') gestures.push(String(g));
+      return go.call(this, g, o);
+    }));
+    let on: string | undefined;
+    r.overlay.showCaption = ((name: string) => { if (name.includes('on the phone')) on = r.director.current?.subject; }) as never;
+    await r.run();
+    expect(r.spoken.find((s) => s.line === 'Ted. Suit up.')?.who).toBe('barney');
+    expect(on).toBe('ted');
+    expect(gestures).toContain('phone_call');
+  }, 60000);
+
+  test('a freeze frame or a gesture on someone turned to talk to the room is shot from the side they face', async () => {
+    const r = rig([sceneItem(scene([
+      say('robin', 'Sir, your best line?', { to: 'ted' }) as Beat,
+      say('ted', 'Only by destiny.', { to: 'robin' }) as Beat,
+      { type: 'act', character: 'ted', gesture: 'shrug' },
+      { type: 'freeze', character: 'ted', line: 'Kids, I had been workshopping it.' },
+    ], { cast: [{ character: 'robin', mark: 'center' }, { character: 'ted', mark: 'bar_stool_2' }] as Scene['cast'] }))]);
+    const singles: string[] = [];
+    const closeup = r.director.closeup.bind(r.director);
+    spies.push(spyOn(r.director, 'closeup').mockImplementation((id, toward, push) => {
+      if (id === 'ted' && r.stage.actors.robin.talking === false) singles.push(`${id}>${toward ?? ''}`);
+      return closeup(id, toward, push);
+    }));
+    let frozen = false;
+    r.overlay.showCaption = (() => { if (r.renderer.still) frozen = true; }) as never;
+    await r.run();
+    expect(frozen).toBe(true);
+    // (on a bar stool facing the bar, his face is turned round to Robin: a single from the bar would be the back of his head)
+    expect(singles.length).toBeGreaterThan(0);
+    expect(singles.every((s) => s === 'ted>robin')).toBe(true);
+  }, 60000);
+
+  test('a montage shot goes straight in on its people, and footage played again is wound back first', async () => {
+    const order: string[] = [];
+    const r = rig([sceneItem(resolveStrands({ code: 'S99E01', title: 'T', logline: '', scenes: [scene([
+      {
+        type: 'montage', music: 'upbeat', shots: [
+          { location: 'rooftop', time: 'night', label: 'Day 1', cast: [{ character: 'ted', mark: 'lawn_chair_middle' }], beats: [] },
+          { location: 'office', time: 'day', label: 'Day 2', cast: [{ character: 'ted', mark: 'cubicle_1' }], beats: [] },
+        ],
+      },
+      { type: 'cutaway', id: 'tape', style: 'flashback', look: 'video', location: 'metro_news_one', time: 'day', cast: [{ character: 'robin', mark: 'anchor_left' }], beats: [say('robin', 'Good evening.') as Beat] },
+      { type: 'replay', of: 'tape', look: 'video', label: 'Again' },
+    ])] }).scenes[0])], { speak: async (line) => { order.push(`say:${line}`); } });
+    spies.push(spyOn(audio, 'montage').mockImplementation(() => {}));
+    const montage: number[] = [];
+    const { location, osd } = r.overlay;
+    r.overlay.location = ((t: string, look?: string) => {
+      location(t, look);
+      order.push(`card:${t}`);
+      if (look === 'montage') queueMicrotask(() => montage.push(r.director.current!.pos.distanceTo(r.stage.actors.ted.headWorld)));
+    }) as never;
+    r.overlay.osd = ((t: string | null) => { osd(t); order.push(`osd:${t}`); }) as never;
+    await r.run();
+    // (not the master of the whole set, with Ted small and far off)
+    expect(montage).toHaveLength(2);
+    for (const d of montage) expect(d).toBeLessThan(3.5);
+    const again = order.indexOf('card:Again');
+    expect(order.slice(again)).toEqual(['card:Again', 'osd:▶ PLAY', 'osd:◀◀ REWIND', 'osd:▶ PLAY', 'say:Good evening.', 'osd:null']);
   }, 60000);
 });

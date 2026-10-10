@@ -156,6 +156,25 @@ describe('the episodes use the new devices', () => {
     expect(SCRIPTS.some((ep) => ep.scenes.some((s) => s.wardrobe?.length))).toBe(true);
   });
 
+  test('every storytelling device plays somewhere, so the screen tests see it', () => {
+    const say = beats.flatMap((b) => b.type === 'say' ? [b] : []);
+    const cutaways = beats.flatMap((b) => b.type === 'cutaway' ? [b] : []);
+    const replays = beats.flatMap((b) => b.type === 'replay' ? [b] : []);
+    expect(beats.some((b) => b.type === 'split' && b.panels.length === 3)).toBe(true);
+    expect(replays.some((b) => b.changes?.length && b.add?.length)).toBe(true);
+    expect(replays.some((b) => b.look === 'video')).toBe(true);
+    expect(new Set(cutaways.map((b) => b.look ?? 'plain'))).toEqual(new Set(['plain', 'dream', 'memory', 'video']));
+    for (const t of ['whip', 'ripple', 'rewind'] as const) expect([...cutaways, ...replays].some((b) => b.transition === t), t).toBe(true);
+    expect(cutaways.some((c) => c.look === 'video' && c.beats.some((b) => b.type === 'freeze'))).toBe(true);
+    expect(beats.some((b) => b.type === 'montage' && b.label && b.shots.every((s) => s.label))).toBe(true);
+    expect(say.some((b) => b.offscreen === 'phone')).toBe(true);
+    for (const shot of ['push_in', 'two', 'closeup', 'wide'] as const) expect(say.some((b) => b.shot === shot), shot).toBe(true);
+    expect(say.some((b) => b.delivery === 'sing' && b.accompanied)).toBe(true);
+    expect(say.some((b) => b.delivery === 'sing' && !b.accompanied)).toBe(true);
+    expect(say.some((b) => b.react && b.react.length > 2)).toBe(true);
+    expect(beats.some((b) => b.type === 'narrate' && b.over)).toBe(true);
+  });
+
   test('every new gesture shows up somewhere', () => {
     const used = new Set(beats.flatMap((b) => [
       ...(b.type === 'say' || b.type === 'act' || b.type === 'freeze') && b.gesture ? [b.gesture] : [],

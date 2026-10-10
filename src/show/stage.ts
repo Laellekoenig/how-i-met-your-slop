@@ -92,6 +92,10 @@ export class Stage {
   private strobeDt = 0;
   /** A split screen is up: its sets share the same floor space, so nobody there gives way to anybody. */
   private split = false;
+  /** The set whose marks `occupancy` holds. A split screen keeps the marks taken in the panels opened before it in
+   *  `panelMarks`, so the background people stay off a mark someone took on their set. */
+  private marksSet: LocationId | null = null;
+  private panelMarks = new Map<LocationId, Set<string>>();
   /** Who gives way to whom, so nobody walks through anybody. Whoever's working a door keeps to their way. */
   private crowd = new Crowd((a) => Object.values(this.actors).includes(a) && !this.atDoor(a), (a) => this.seatOf(a));
   /** Who's going through a door right now, and which; their turn ends when they're told to do anything else. */
@@ -281,6 +285,8 @@ export class Stage {
     this.current.setTime(time);
     this.time = time;
     this.split = false;
+    this.marksSet = this.current.id;
+    this.panelMarks.clear();
     this.crowd.clear();
     for (const c of CHARACTER_IDS) this.dress(c, outfitAt(c, id));
     for (const a of Object.values(this.actors)) {
@@ -451,7 +457,12 @@ export class Stage {
   }
 
   private syncExtras() {
-    for (const e of this.extras) if (e.set === this.current.id && e.mark) e.actor.root.visible = !this.occupancy.has(e.mark);
+    for (const e of this.extras) if (e.set === this.current.id && e.mark) e.actor.root.visible = !this.taken(e.set, e.mark);
+  }
+
+  /** Someone in the cast is on this mark on this set (or on one of a split screen's other panels). */
+  private taken(set: LocationId, mark: string) {
+    return !!(set === this.marksSet ? this.occupancy : this.panelMarks.get(set))?.has(mark);
   }
 
   /** Standing spot near a mark, nudged if a standing mark is taken (people can share floor space). */
@@ -684,7 +695,9 @@ export class Stage {
    * marks. Everyone already placed stays where they are (on their own set); `setLocation` or `thaw` ends it.
    */
   openPanel(id: LocationId, time: TimeOfDay) {
+    if (this.marksSet) this.panelMarks.set(this.marksSet, new Set(this.occupancy.keys()));
     this.current = this.sets[id] ?? this.current;
+    this.marksSet = this.current.id;
     this.current.group.visible = true;
     this.current.setTime(time);
     this.split = true;
@@ -850,7 +863,7 @@ export class Stage {
       }
     for (const e of this.extras) {
       if (!this.sets[e.set].group.visible) continue;
-      if (e.mark) e.actor.root.visible = !this.occupancy.has(e.mark);
+      if (e.mark) e.actor.root.visible = !this.taken(e.set, e.mark);
       if (!e.chatty) {
         e.actor.update(dt, t);
         continue;

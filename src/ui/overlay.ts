@@ -19,6 +19,8 @@ export class Overlay {
   private yearEl = $('year');
   private insertEl = $('insert');
   private osdEl = $('osd');
+  /** When the time/place super last went up (it fades out on its own, LABEL_SECONDS later). */
+  private labelAt = -Infinity;
 
   constructor() {
     const resize = new ResizeObserver(() => this.clearCaptionSpace());
@@ -125,6 +127,9 @@ export class Overlay {
 
   /** Time/place supers share the show's lettering across scenes, cutaways and montages. */
   location(text: string, look?: CutawayLook | 'montage') {
+    // (the super has the lower third to itself: an opening credit on its way out gives way to it)
+    if (this.creditEl.className === 'cast') this.creditEl.classList.add('hidden');
+    this.labelAt = performance.now();
     this.loc.className = look ? `cutaway ${look}` : '';
     this.loc.textContent = text;
     this.loc.classList.remove('hidden');
@@ -135,6 +140,11 @@ export class Overlay {
 
   hideLocation() {
     this.loc.classList.add('hidden');
+  }
+
+  /** A time/place super is on screen: no opening credit goes up over it. */
+  get labelShowing() {
+    return !this.loc.classList.contains('hidden') && performance.now() - this.labelAt < LABEL_SECONDS * 1000;
   }
 
   /** The VCR's on-screen display over footage: "▶ PLAY", "❚❚ PAUSE", "◀◀ REWIND". */
@@ -148,6 +158,9 @@ export class Overlay {
     if (msg) this.standbyMsg.textContent = msg;
   }
 }
+
+/** How long a time/place super stays up: its fade in, hold and fade out in the stylesheet. */
+const LABEL_SECONDS = 3.6;
 
 /** Dev mode's side panel: what's on, and a running transcript. */
 export class Panel {

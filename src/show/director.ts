@@ -159,6 +159,26 @@ export class Director {
     return this.camera.clone();
   }
 
+  /** The screen's shape, width over height. */
+  get aspect() {
+    return this.camera.aspect;
+  }
+
+  /** A shot framed for a picture narrower than the screen (a split-screen panel, `aspect` wide), and its lens to hold
+   *  on to. Every check that someone is in the picture is made against the panel, not the whole screen. */
+  panel(aspect: number, frame: () => void) {
+    const cam = this.camera, full = cam.aspect;
+    cam.aspect = aspect;
+    cam.updateProjectionMatrix();
+    try {
+      frame();
+      return this.snapshot();
+    } finally {
+      cam.aspect = full;
+      cam.updateProjectionMatrix();
+    }
+  }
+
   /** Whatever was on screen before, the next cut goes in at once: a scene staged anew, a jump to another set. */
   fresh() {
     this.hard = true;
@@ -744,11 +764,14 @@ export class Director {
     const facing = new THREE.Vector3(Math.sin(A.facing) + Math.sin(B.facing), 0, Math.cos(A.facing) + Math.cos(B.facing));
     const fronts = facing.lengthSq() > 0.25 && facing.z < 0 ? [facing.clone().normalize()] : [new THREE.Vector3(0, 0, 1)];
     if (facing.lengthSq() > 0.25 && Math.abs(facing.x) > Math.abs(facing.z) && facing.z >= 0) fronts.unshift(facing.clone().normalize());
-    const dist = Math.max(2.3, sep * 1.25 + 1.3);
-    if (dist > (this.stage.current.maxTwoShotDistance ?? Infinity)) return this.closeup(a, b);
+    // (back far enough for both of them and a shoulder's width to spare across the picture: on a full screen the first
+    // two always are, but a split-screen panel is a narrow strip, which can take a wider lens closer in)
+    const reach = (fov: number) => Math.max(2.3, sep * 1.25 + 1.3, (sep / 2 + 0.35) / (0.85 * Math.tan(THREE.MathUtils.degToRad(fov / 2)) * this.camera.aspect));
+    const dist = reach(42), narrow = this.camera.aspect < 1.2;
+    if (Math.min(dist, narrow ? reach(60) : Infinity) > (this.stage.current.maxTwoShotDistance ?? Infinity)) return this.closeup(a, b);
     const target = mid.clone().add(new THREE.Vector3(0, -0.2, 0));
     // In a car, come in closer on a wider lens rather than leave the cabin.
-    const tries: [number, number][] = this.stage.current.cameraBounds ? [[dist, 42], [1.6, 52], [1.2, 60]] : [[dist, 42]];
+    const tries: [number, number][] = this.stage.current.cameraBounds ? [[dist, 42], [1.6, 52], [1.2, 60]] : narrow ? [[reach(60), 60], [dist, 42]] : [[dist, 42]];
     for (const front of fronts) {
       const perp = new THREE.Vector3(-along.z, 0, along.x);
       if (perp.dot(front) < 0) perp.negate();
