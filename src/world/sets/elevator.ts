@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cyl, mesh, toon } from '../../engine/materials';
-import { paneling, tiles } from '../../engine/textures';
-import { keyLight, mark, nodes, type StageSet, v3 } from './common';
+import { checker, paneling, tiles } from '../../engine/textures';
+import { keyLight, mark, nodes, SlidingDoor, type StageSet, v3 } from './common';
 import { label } from './furnishings';
 
 /** Cabin size: a real passenger car, cheated a little bigger for the cameras. The doors are upstage. */
@@ -12,7 +12,7 @@ const DX = -0.2, DW = 1.1, DH = 2.05;
 /** The shell runs on past the open audience side, so nothing outside the cabin ever shows at a frame edge. */
 const BEYOND = FRONT + 4;
 
-/** A generic old wood-paneled passenger elevator: walnut, brass and closed steel doors. */
+/** A generic old wood-paneled passenger elevator: walnut, brass and steel doors that slide open onto a landing. */
 export function buildElevator(): StageSet {
   const g = new THREE.Group(); g.name = 'elevator';
   const walnut = (len: number) => toon('#ffffff', { map: paneling('#654735', [Math.max(1, Math.round(len / 0.78)), 1]) });
@@ -28,7 +28,11 @@ export function buildElevator(): StageSet {
     g.add(mesh(new THREE.PlaneGeometry(len, RAIL), walnut(len), x, RAIL / 2, z, false).rotateY(rotY));
     g.add(mesh(new THREE.PlaneGeometry(len, H - RAIL), walnut(len), x, (H + RAIL) / 2, z, false).rotateY(rotY));
   };
-  wall(W, 0, BACK, 0);
+  // (the back wall goes round the doorway: the doors slide away into it, onto the landing)
+  const L0 = -SIDE, L1 = DX - DW / 2, R0 = DX + DW / 2, R1 = SIDE;
+  wall(L1 - L0, (L0 + L1) / 2, BACK, 0);
+  wall(R1 - R0, (R0 + R1) / 2, BACK, 0);
+  g.add(mesh(new THREE.PlaneGeometry(DW, H - DH), walnut(DW), DX, (H + DH) / 2, BACK, false));
   wall(outside, -SIDE, mid, Math.PI / 2);
   wall(outside, SIDE, mid, -Math.PI / 2);
   // Kick plates, chair rails and a cornice along the two side walls, inside the cabin only.
@@ -41,18 +45,25 @@ export function buildElevator(): StageSet {
     g.add(mesh(cyl(0.022, 0.022, DEPTH - 0.4, 8).rotateX(Math.PI / 2), brass, s * (SIDE - 0.075), RAIL + 0.03, 0, false));
     for (const z of [-0.85, 0, 0.85]) g.add(mesh(box(0.07, 0.025, 0.025), darkBrass, s * (SIDE - 0.04), RAIL + 0.03, z, false));
   }
-  g.add(mesh(box(W, 0.12, 0.03), trim, 0, 0.06, BACK + 0.015, false));
+  for (const [a, b] of [[L0, L1], [R0, R1]]) g.add(mesh(box(b - a, 0.12, 0.03), trim, (a + b) / 2, 0.06, BACK + 0.015, false));
   g.add(mesh(box(W, 0.09, 0.06), trim, 0, H - 0.045, BACK + 0.03, false));
   // One light panel in a wood coffer: an enclosed cabin, not a lobby.
   g.add(mesh(box(1.5, 0.04, 1.3), trim, 0, H - 0.02, -0.05, false));
   g.add(mesh(box(1.25, 0.03, 1.05), toon('#f3ead2', { emissive: '#f6eed8', emissiveIntensity: 0.7 }), 0, H - 0.045, -0.05, false));
 
-  // Closed brushed-steel doors in a brass surround, on the back wall facing the audience.
-  g.add(mesh(box(DW + 0.18, DH + 0.1, 0.04), darkBrass, DX, (DH + 0.1) / 2, BACK + 0.02));
-  g.add(mesh(box(DW + 0.06, DH + 0.04, 0.05), brass, DX, (DH + 0.04) / 2, BACK + 0.03));
-  for (const s of [-1, 1]) g.add(mesh(box(DW / 2 - 0.01, DH, 0.05), steel, DX + s * DW / 4, DH / 2, BACK + 0.06));
-  g.add(mesh(box(0.015, DH, 0.02), toon('#565c58'), DX, DH / 2, BACK + 0.09));
-  g.add(mesh(box(DW + 0.06, 0.02, 0.1), brass, DX, 0.01, BACK + 0.07, false));
+  // Brushed-steel doors in a brass surround, on the back wall facing the audience. They slide apart into the wall.
+  for (const sx of [-1, 1]) {
+    g.add(mesh(box(0.09, DH + 0.1, 0.04), darkBrass, DX + sx * (DW / 2 + 0.045), (DH + 0.1) / 2, BACK + 0.02));
+    g.add(mesh(box(0.03, DH + 0.04, 0.05), brass, DX + sx * (DW / 2 + 0.015), (DH + 0.04) / 2, BACK + 0.03));
+  }
+  g.add(mesh(box(DW + 0.18, 0.06, 0.04), darkBrass, DX, DH + 0.07, BACK + 0.02));
+  g.add(mesh(box(DW + 0.06, 0.04, 0.05), brass, DX, DH + 0.02, BACK + 0.03));
+  const doors = new SlidingDoor(DW, DH, steel, toon('#565c58'));
+  doors.position.set(DX, 0, BACK);
+  g.add(doors);
+  // the brass sill, through the doorway
+  g.add(mesh(box(DW + 0.06, 0.02, 0.16), brass, DX, 0.01, BACK + 0.03, false));
+  landing(g);
   // Floor indicator over the doors: an old brass dial with its needle on the floor coming up.
   const DY = DH + 0.13;
   g.add(mesh(new THREE.CircleGeometry(0.2, 18, 0, Math.PI), darkBrass, DX, DY, BACK + 0.04, false));
@@ -94,7 +105,7 @@ export function buildElevator(): StageSet {
     id: 'elevator', name: 'The Elevator', group: g,
     // Conversational distance: a front row of three, two more just inside the doors.
     nodes: nodes({ door: [DX, -0.82], back: [-0.62, -0.7], buttons: [0.62, -0.62], left: [-0.7, 0.18], right: [0.7, 0.18], center: [0, 0.32] }),
-    edges: [['door', 'back'], ['door', 'buttons'], ['door', 'center'], ['back', 'left'], ['buttons', 'right'], ['left', 'center'], ['right', 'center']], door: 'door',
+    edges: [['door', 'back'], ['door', 'buttons'], ['door', 'center'], ['back', 'left'], ['buttons', 'right'], ['left', 'center'], ['right', 'center']], door: 'door', doors: { door: doors },
     marks: {
       left: mark(-0.7, 0.18, 0.3, 'left', 'left side of the elevator'),
       right: mark(0.7, 0.18, -0.3, 'right', 'right side of the elevator'),
@@ -113,4 +124,23 @@ export function buildElevator(): StageSet {
     ], ambience: 'office', background: [], doorSound: 'elevator',
     setTime() { /* Enclosed cabin, constant practical lighting. */ },
   };
+}
+
+/** The landing outside, seen through the open doors: a dim old hall, sage plaster over a dark wainscot on a black and
+ *  white tiled floor. It's a little wider than the cabin, so whoever steps out can walk
+ *  off to the side out of sight. */
+function landing(g: THREE.Group) {
+  const D = 1.9, W2 = 3.2, HH = 2.6, x0 = DX, z0 = BACK - D / 2, far = BACK - D, RAIL = 0.92;
+  const plaster = toon('#6e7465'), wainscot = toon('#3f362d'), trim = toon('#2a231d');
+  g.add(mesh(new THREE.PlaneGeometry(W2, D), toon('#ffffff', { map: checker('#2b2926', '#8f897b', [8, 5]) }), x0, 0, z0, false).rotateX(-Math.PI / 2));
+  g.add(mesh(new THREE.PlaneGeometry(W2, D), toon('#4a4a42'), x0, HH, z0, false).rotateX(Math.PI / 2));
+  const wall = (len: number, x: number, z: number, rotY: number) => {
+    g.add(mesh(new THREE.PlaneGeometry(len, RAIL), wainscot, x, RAIL / 2, z, false).rotateY(rotY));
+    g.add(mesh(new THREE.PlaneGeometry(len, HH - RAIL), plaster, x, (HH + RAIL) / 2, z, false).rotateY(rotY));
+  };
+  wall(W2, x0, far, 0);
+  for (const s of [-1, 1]) wall(D, x0 + s * W2 / 2, z0, -s * Math.PI / 2);
+  // a baseboard and chair rail along the far wall (nothing up at head height to grow out of anyone's hair)
+  g.add(mesh(box(W2, 0.12, 0.02), trim, x0, 0.06, far + 0.01, false));
+  g.add(mesh(box(W2, 0.04, 0.03), trim, x0, RAIL, far + 0.015, false));
 }

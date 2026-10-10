@@ -312,4 +312,42 @@ describe('playback of the new beats', () => {
     expect(renderer.still).toBe(0);
     expect(director.held).toBe(false);
   }, 60000);
+
+  test("in the elevator a chime is the floor's ding, and the doors that open after it don't ding again", async () => {
+    const stage = testStage();
+    const director = new Director(new THREE.PerspectiveCamera(45, 16 / 9, 0.05, 60), stage);
+    const renderer = { fade: 1, rewind: 0, dream: 0, ripple: 0, memory: 0, still: 0 };
+    spies.push(spyOn(speech, 'speak').mockImplementation((_text, _profile, onStart) => {
+      onStart?.();
+      return { done: Promise.resolve() };
+    }));
+    const dings: string[] = [];
+    spies.push(spyOn(audio, 'door').mockImplementation((kind) => { dings.push(`door:${kind}`); }));
+    spies.push(spyOn(audio, 'cue').mockImplementation((cue) => { dings.push(`cue:${cue}`); }));
+    const beats = [
+      { type: 'sound', sound: 'chime' },
+      { type: 'say', character: 'guest1', to: 'ted', line: 'This is four.' },
+      { type: 'exit', character: 'guest1' },
+      { type: 'enter', character: 'barney', to: 'back' },
+      { type: 'say', character: 'barney', to: 'ted', line: 'Going up?' },
+    ] as Beat[];
+    const meta = { id: 'lift', code: 'S1E1', title: 'Lift', logline: '' };
+    const cast = [{ character: 'ted', mark: 'left' }, { character: 'guest1', mark: 'buttons' }] as Scene['cast'];
+    const items: ShowItem[] = [{ kind: 'scene', episode: meta, index: 1, scene: { location: 'elevator', time: 'night', transition: 'cut', cast, beats } }];
+    let requests = 0;
+    const source = { next: () => (++requests <= items.length ? Promise.resolve(items[requests - 1]) : new Promise<ShowItem>(() => {})) };
+    const player = new Player(stage, director, renderer as never, overlayStub() as never, { line() {} } as never, source);
+    let t = 0;
+    const tick = setInterval(() => { stage.update(1 / 30, (t += 1 / 30)); director.update(1 / 30); }, 5);
+    try {
+      void player.run();
+      const start = performance.now();
+      while (requests <= items.length && performance.now() - start < 40000) await new Promise((r) => setTimeout(r, 20));
+    } finally {
+      clearInterval(tick);
+    }
+    // one ding for Gwen's floor, none as her doors open; Barney's arrival dings as his doors open
+    expect(dings.filter((d) => d !== 'door:none')).toEqual(['door:elevator', 'door:elevator']);
+    expect(stage.onStage('barney')).toBe(true);
+  }, 60000);
 });

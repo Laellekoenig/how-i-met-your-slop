@@ -14,9 +14,10 @@ interface ActiveShot extends Framing {
   kind: ShotKind;
   follow?: Actor;
   followOffset?: THREE.Vector3;
-  push: number; // dolly speed toward target, m/s; 0 for a locked-off shot
-  /** How long the dolly keeps going after the cut (4 s unless it's a deliberate push-in). */
-  pushFor?: number;
+  push: number; // dolly speed toward target, m/s, for 4 s after the cut; 0 for a locked-off shot
+  /** A push-in: the lens moves in along its line from `from` to `to` (m from what it's aimed at) over `seconds`,
+   *  easing in and out; `t` is how far into the move it is. */
+  dolly?: { from: number; to: number; seconds: number; t: number };
   subject?: CharacterId;
   drift?: EstablishingShot;
   subjects?: CharacterId[];
@@ -107,6 +108,21 @@ export const MIN_SHOT = 1.2;
 
 /** The most of a single's picture (see `Director.clutter`) set dressing near the lens may block. */
 export const MAX_CLUTTER = 0.1;
+
+/** A push-in, the writer's move for a realization or a confession: a dolly from a medium shot in to a tight single,
+ *  over the line it's on. */
+const PUSH = {
+  /** How far from the face it starts (m), furthest first (a closed cabin only has room for the nearer ones)... */
+  from: [3.6, 3.1, 2.6, 2.2],
+  /** ... and how close it ends, closest first, at most `tighten` of the way it started. */
+  to: [1.1, 1.3, 1.5],
+  tighten: 0.6,
+  fov: 34,
+  /** How long the move takes when the line's length isn't known, and the shortest and longest it may take (s). */
+  seconds: 3,
+  min: 1.4,
+  max: 6,
+};
 
 /** Over-the-shoulder lenses to try: how far behind the listener's head (m), and the vertical field of view. */
 const OTS_LENSES: [number, number][] = [[1.5, 30], [1.8, 28]];
@@ -655,9 +671,32 @@ export class Director {
     return true;
   }
 
-  /** A slow, deliberate dolly in on someone: reveals, realizations, a big confession. */
-  pushIn(id: CharacterId, toward?: CharacterId) {
-    this.closeup(id, toward, true);
+  /** A deliberate dolly in on someone, from a medium shot to a tight single over `seconds` (the line it's on):
+   *  reveals, realizations, a big confession. */
+  pushIn(id: CharacterId, toward?: CharacterId, seconds = PUSH.seconds) {
+    // (a cut held back for the shot on screen to have its moment starts the move late: it ends with the line anyway)
+    const wait = this.shot && !this.hard ? Math.max(0, this.minShot - (this.time - this.lastCut)) : 0;
+    this.closeup(id, toward, THREE.MathUtils.clamp(seconds - wait, PUSH.min, PUSH.max));
+  }
+
+  /** Still pushing in on someone: their next line carries on with the move instead of cutting away mid-way. */
+  pushing(id: CharacterId) {
+    const s = this.current;
+    return !!s?.dolly && s.subject === id && s.dolly.t < s.dolly.seconds;
+  }
+
+  /** Where a push-in starting from `start` can end, as a distance from what it's aimed at: the tightest single along
+   *  the same line that's as clean as any (inside the set, the face in frame with scenery behind it, nobody's head
+   *  across it, no clutter in front), or null. */
+  private pushEnd(start: Framing, a: Actor) {
+    const back = start.pos.clone().sub(start.target), from = back.length();
+    back.normalize();
+    for (const to of PUSH.to) {
+      if (to > from * PUSH.tighten) break;
+      const end = { pos: start.target.clone().addScaledVector(back, to), target: start.target.clone(), fov: start.fov };
+      if (this.foreground(end, a) > DIRTY_EDGE && this.usable(end, [a]) && !this.cluttered(end, a)) return to;
+    }
+    return null;
   }
 
   /** HIMYM car coverage uses fixed windshield/cabin mounts and maintains the seating axis. */
@@ -682,7 +721,9 @@ export class Director {
     return false;
   }
 
-  closeup(id: CharacterId, toward?: CharacterId, pushIn = false): void {
+  /** A single on someone; `push` (seconds) makes it a push-in that long. */
+  closeup(id: CharacterId, toward?: CharacterId, push = 0): void {
+    const pushIn = push > 0;
     const a = this.stage.actors[id];
     if (!a?.root.visible) return this.wide(0);
     if (this.stage.current.dialogueCameras) {
@@ -691,12 +732,14 @@ export class Director {
       return this.coverage([id], false);
     }
     const head = a.headWorld;
-    const look = new THREE.Vector3(Math.sin(a.facing), 0, Math.cos(a.facing));
+    // (a push-in ends up tight on their face: framed on the way they're turning to face, not the way they face yet)
+    const facing = pushIn && !a.isWalking ? a.targetFacing : a.facing;
+    const look = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
     if (toward && this.stage.onStage(toward)) {
       const t = this.stage.actors[toward].headWorld.sub(head).setY(0);
       if (t.lengthSq() > 0.01) look.copy(t.normalize());
     }
-    const forward = new THREE.Vector3(Math.sin(a.facing), 0, Math.cos(a.facing));
+    const forward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
     // Their face is turned to whoever they're talking to: never shoot it from the other side, past the back of
     // their head (someone on a bar stool talking to the person on the next stool).
     const face = forward.clone().add(look).normalize(), turned = look.dot(forward) < 0.95;
@@ -705,9 +748,8 @@ export class Director {
     const candidates = [forward.clone().lerp(look, 0.35).normalize(),
       ...[0.65, -0.65, 1.1, -1.1, 1.4, -1.4].map((angle) => forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle)),
       ...[0.3, 0.65, 1].map((blend) => look.clone().lerp(audience, blend).normalize())];
-    // A push-in starts from a medium shot further back and creeps in over several seconds; inside a car
-    // there's less room to back off.
-    const dists = pushIn ? [3.3, 2.8, 2.35] : this.stage.current.cameraBounds ? [2.35, 1.65, 1.15, 0.85, 0.6] : [2.35, 1.65, 1.15];
+    // A push-in starts from a medium shot further back (see PUSH).
+    const dists = pushIn ? PUSH.from : this.stage.current.cameraBounds ? [2.35, 1.65, 1.15, 0.85, 0.6] : [2.35, 1.65, 1.15];
     // On an open set, someone facing upstage has no reverse: their single is a profile from the side. So is someone
     // up against a window or a wall, with no room for a clean angle in front of them.
     const around = (angles: number[]) => angles.map((angle) => forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle));
@@ -716,25 +758,28 @@ export class Director {
     // Last of all, the angles in between, from in between (someone up against a window, a plant in the way).
     const sweep = around([0.3, -0.3, 0.9, -0.9, 1.4, -1.4, 1.6, -1.6]);
     const nearer = pushIn || this.stage.current.cameraBounds ? dists : [2, 1.4];
-    const single = (shot: Framing) => this.cut({ kind: 'closeup', ...shot, follow: a, followOffset: new THREE.Vector3(0, -0.16, 0),
-      push: pushIn ? 0.32 : 0, pushFor: pushIn ? 6 : undefined, subject: id, subjects: [id] });
+    const single = (shot: Framing, end: number | null) => this.cut({ kind: 'closeup', ...shot, follow: a, followOffset: new THREE.Vector3(0, -0.16, 0),
+      push: 0, dolly: end === null ? undefined : { from: shot.pos.distanceTo(shot.target), to: end, seconds: push, t: 0 }, subject: id, subjects: [id] });
     // Somebody else's head in the picture, between the lens and the subject: keep looking for a clean angle, and
     // if there isn't one, settle for the angle that keeps their head furthest out to the side, as long as it's out at
     // the edge of frame. Never a head across the middle of the picture: then it's a wide.
-    let dirty: Framing | null = null, margin = DIRTY_EDGE;
+    let dirty: Framing | null = null, dirtyEnd: number | null = null, margin = DIRTY_EDGE;
     for (const [ds, minDot, range] of [[candidates, 0.05, dists], [profiles, -0.25, dists], [sweep, -0.25, nearer]] as const) for (const dist of range) for (const d of ds) {
       if (d.lengthSq() < 0.1 || d.dot(forward) < minDot || (turned && d.dot(face) < 0.3)) continue;
       const pos = head.clone().addScaledVector(d, dist);
       pos.y = head.y + 0.08;
       const target = head.clone().add(new THREE.Vector3(0, -0.16, 0));
-      const fov = pushIn ? 34 : dist < 0.7 ? 60 : dist < 1 ? 50 : dist < 1.5 ? 44 : 32;
+      const fov = pushIn ? PUSH.fov : dist < 0.7 ? 60 : dist < 1 ? 50 : dist < 1.5 ? 44 : 32;
       const shot = { pos, target, fov }, side = this.foreground(shot, a);
       // (the odd angles the sweep finds often look along a wall or out of a window: check the whole picture)
       if (side <= margin || !this.usable(shot, [a]) || this.cluttered(shot, a) || (ds === sweep && !this.hasBackdrop(shot, true))) continue;
-      if (side === Infinity) return single(shot);
-      dirty = shot; margin = side;
+      // (a push-in has to have somewhere clean to end up, too)
+      const end = pushIn ? this.pushEnd(shot, a) : null;
+      if (pushIn && end === null) continue;
+      if (side === Infinity) return single(shot, end);
+      dirty = shot; dirtyEnd = end; margin = side;
     }
-    if (dirty) return single(dirty);
+    if (dirty) return single(dirty, dirtyEnd);
     if (pushIn) return this.closeup(id, toward);
     // No clean single: the two of them together, from where their faces are, else the tightest wide that has them.
     if (toward && this.stage.onStage(toward) && !this.fallback) {
@@ -870,10 +915,10 @@ export class Director {
   }
 
   /** The shot the writer asked for, on `subject` (and `other`, for a two-shot). */
-  intent(shot: ShotIntent, subject: CharacterId, other?: CharacterId) {
+  intent(shot: ShotIntent, subject: CharacterId, other?: CharacterId, seconds?: number) {
     switch (shot) {
       case 'closeup': return this.closeup(subject, other);
-      case 'push_in': return this.pushIn(subject, other);
+      case 'push_in': return this.pushIn(subject, other, seconds);
       case 'wide': return this.coverage(this.stage.castIds(), false, true);
       case 'two': {
         const partner = other && other !== subject && this.stage.onStage(other) ? other : this.nearest(subject);
@@ -947,6 +992,7 @@ export class Director {
   onLine(speaker: CharacterId, to?: CharacterId) {
     const s = this.current;
     const since = this.time - this.lastCut;
+    if (this.pushing(speaker)) return;
     if (s && s.subject === speaker && s.kind !== 'wide' && this.rng() < 0.65) return;
     if (s && s.subject === speaker && since < 2.5) return;
     const r = this.rng();
@@ -1096,7 +1142,17 @@ export class Director {
         if (off < 0.01) s.reframing = false;
       }
     }
-    if (dt > 0 && s.push && this.time - this.lastCut < (s.pushFor ?? 4)) {
+    if (dt > 0 && s.dolly && s.dolly.t < s.dolly.seconds) {
+      // A push-in: along its line, eased in and out, keeping inside the set and the subject in frame (or it stops).
+      const d = s.dolly;
+      d.t = Math.min(d.seconds, d.t + dt);
+      const k = d.t / d.seconds, back = s.pos.clone().sub(s.target).normalize();
+      const next = s.target.clone().addScaledVector(back, d.from + (d.to - d.from) * k * k * (3 - 2 * k));
+      const actors = (s.subjects ?? []).filter((id) => this.stage.onStage(id)).map((id) => this.stage.actors[id]);
+      if (this.inside(next) && this.covers({ ...s, pos: next }, actors)) s.pos.copy(next);
+      else d.t = d.seconds;
+    }
+    if (dt > 0 && s.push && this.time - this.lastCut < 4) {
       const dir = s.target.clone().sub(s.pos);
       const next = s.pos.clone().addScaledVector(dir.normalize(), s.push * dt);
       const actors = (s.subjects ?? []).filter((id) => this.stage.onStage(id)).map((id) => this.stage.actors[id]);

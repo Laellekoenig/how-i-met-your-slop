@@ -514,6 +514,70 @@ describe('camera coverage on the current sets', () => {
     expect(from - camera.position.distanceTo(stage.actors.ted.headWorld)).toBeGreaterThan(0.6);
   });
 
+  test('a push-in goes from a medium shot to a tight single over its line, easing in and out', () => {
+    stage.setWardrobe([]);
+    const cases = [
+      // seated at the head of the booth, the gang round the table; standing in the middle of the apartment
+      ['maclarens', [['ted', 'booth_end'], ['marshall', 'booth_left_back'], ['lily', 'booth_left_front'], ['robin', 'booth_right_back'], ['barney', 'booth_right_front']]],
+      ['apartment', [['ted', 'center'], ['marshall', 'red_chair'], ['lily', 'couch_left']]],
+    ] as const;
+    for (const [location, cast] of cases) {
+      stage.setLocation(location, 'night');
+      for (const [id, mark] of cast) stage.place(id, mark);
+      director.fresh();
+      director.wide(0);
+      director.fresh();
+      director.pushIn('ted', 'marshall', 3);
+      const head = () => stage.actors.ted.headWorld;
+      const shot = director.current!;
+      expect(shot.kind, location).toBe('closeup');
+      const away = [camera.position.distanceTo(head())];
+      for (let i = 0; i < 60; i++) {
+        director.update(0.05);
+        away.push(camera.position.distanceTo(head()));
+        if (i % 15 === 14) expectVisible(stage.actors.ted, `${location} push-in ${i}`);
+      }
+      // (a locked-off lens: the same lens from 0.6 of the distance or nearer is at least 1.6 times as tight)
+      expect(away.at(-1)! / away[0], location).toBeLessThan(0.6);
+      expect(away[0], location).toBeGreaterThan(2);
+      // eased: slower off the mark and into the end than through the middle, and all over by the end of the line
+      const speed = (i: number) => away[i] - away[i + 1];
+      expect(speed(1), location).toBeLessThan(speed(30) / 3);
+      expect(speed(58), location).toBeLessThan(speed(30) / 3);
+      for (let i = 0; i < 10; i++) director.update(0.05);
+      expect(Math.abs(camera.position.distanceTo(head()) - away[60]), location).toBeLessThan(0.01);
+      expect(director.current, location).toBe(shot);
+      // the same lens, framed in tight: inside the set, with no clutter or screen across the end of it
+      expect(director.clutter(shot, stage.actors.ted), location).toBeLessThanOrEqual(MAX_CLUTTER);
+    }
+  });
+
+  test('the next line from the same person keeps on with a push-in still moving; someone else\'s cuts away', () => {
+    stage.setWardrobe([]);
+    stage.setLocation('apartment', 'night');
+    stage.place('ted', 'center');
+    stage.place('marshall', 'red_chair');
+    director.minShot = MIN_SHOT;
+    try {
+      // (from a wide: asked for again, the push-in already on screen from the last test would be held, not started over)
+      director.fresh();
+      director.wide(0);
+      director.fresh();
+      director.pushIn('ted', 'marshall', 4);
+      const shot = director.current;
+      for (let i = 0; i < 30; i++) director.update(0.05);
+      expect(director.pushing('ted')).toBe(true);
+      for (let k = 0; k < 8; k++) director.onLine('ted', 'marshall');
+      expect(director.current).toBe(shot);
+      director.closeup('marshall', 'ted');
+      expect(director.current).not.toBe(shot);
+      for (let i = 0; i < 60; i++) director.update(0.05);
+      expect(director.pushing('ted')).toBe(false);
+    } finally {
+      director.minShot = 0;
+    }
+  });
+
   test('asking for the angle already on screen holds it instead of re-cutting to a copy', () => {
     stage.setWardrobe([]);
     stage.setLocation('metro_news_one', 'day'); stage.place('ted', 'center'); stage.place('robin', 'anchor_left');

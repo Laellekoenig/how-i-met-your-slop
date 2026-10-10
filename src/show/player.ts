@@ -118,6 +118,8 @@ export class Player {
   private rewound: ShowItem[] = [];
   private fetching: Promise<ShowItem> | null = null;
   private wake: (() => void) | null = null;
+  /** The lift has already dinged for its floor (a scripted chime): its doors open without another one. */
+  private liftChimed = false;
   private playing = false;
   /** What the current scene's people are wearing (the episode's costumes, with the scene's over them). */
   private wardrobe: Costume[] = [];
@@ -145,6 +147,10 @@ export class Player {
     private source: ContentSource,
   ) {
     stage.onDoorShut = () => audio.doorShut();
+    stage.onDoorOpen = () => {
+      if (!this.liftChimed) audio.door(stage.current.doorSound ?? 'bell');
+      this.liftChimed = false;
+    };
     director.minShot = MIN_SHOT;
   }
 
@@ -644,6 +650,7 @@ export class Player {
 
   private async playScene(scene: Scene, index: number) {
     await this.untilUnpaused();
+    this.liftChimed = false;
     this.hideCaption();
     this.overlay.hideLocation();
     this.overlay.year(false);
@@ -1260,7 +1267,11 @@ export class Player {
         break;
       case 'sound':
         this.panel.line('stage', `[${b.sound}]`);
-        audio.cue(b.sound);
+        // In a lift, a chime is the floor arriving: its ding, and the doors that open next don't ding again.
+        if (b.sound === 'chime' && this.stage.liftDoors) {
+          audio.door('elevator');
+          this.liftChimed = true;
+        } else audio.cue(b.sound);
         await this.wait(0.15);
         break;
       case 'score':
@@ -1325,19 +1336,22 @@ export class Player {
       st.actors[id].lookAt = a.lookAt;
     }
     const delivery = b.delivery;
+    const def = CHARACTERS[b.character];
+    const seconds = estimateDuration(text, def.voice.rate * deliveryRate(delivery));
     const cam = this.cam;
     if (isKid(b.character)) chorus.length ? cam.wide(0) : cam.onCouchLine(b.character);
-    else if (b.shot) cam.intent(b.shot, b.character, to);
-    else if (chorus.length) cam.group([b.character, ...chorus]);
+    // (a push-in moves in over the line it's on)
+    else if (b.shot) cam.intent(b.shot, b.character, to, seconds);
+    else if (cam.pushing(b.character) && !chorus.length) {
+      // still pushing in on them from their last line: the move carries on through this one
+    } else if (chorus.length) cam.group([b.character, ...chorus]);
     // a whisper is a two-shot secret; a shout gets the single
     else if (delivery === 'whisper' && to) cam.twoShot(b.character, to);
     else if (delivery === 'shout') cam.closeup(b.character, to);
     else cam.onLine(b.character, to);
-    const def = CHARACTERS[b.character];
     const name = chorus.length ? groupName([b.character, ...chorus], st.castIds()) : def.name;
     const color = chorus.length ? '#ffffff' : def.color;
     this.panel.line('say', delivery && delivery !== 'fast' && delivery !== 'slow' ? `(${delivery}) ${text}` : text, name, color);
-    const seconds = estimateDuration(text, def.voice.rate * deliveryRate(delivery));
     if (b.gesture && b.gesture !== 'none') this.gesture(b.character, b.gesture, to && this.together(to, b.character) ? to : undefined, seconds, b.emotion);
     const level = delivery === 'shout' ? 1.6 : delivery === 'whisper' ? 0.45 : delivery === 'sing' ? 1.2 : 1;
     // the mouth follows the words: spelled out over the line's length, kept in step by the voice
@@ -1389,7 +1403,8 @@ export class Player {
       return;
     }
     this.panel.line('stage', `${charName(b.character)} enters.`);
-    audio.door(st.current.doorSound ?? 'bell');
+    // (a lift chimes as its doors open, when they open)
+    if (!st.liftDoors) audio.door(st.current.doorSound ?? 'bell');
     const p = st.enter(b.character, b.to);
     this.director.wide(0);
     this.lookAtSpeaker(b.character);

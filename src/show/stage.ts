@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Actor, BACK_HEIGHTS } from '../world/actor';
 import { CHARACTERS, dressed, outfitAt, setGuests, type CharacterDef } from '../world/characters';
-import type { StageSet, Mark, Door } from '../world/sets/common';
+import { SlidingDoor, type StageSet, type Mark, type Door } from '../world/sets/common';
 import { buildSets } from '../world/sets';
 import { KID_MARKS } from '../world/sets/future';
 import { buildEstablishing, type Establishing } from '../world/sets/establishing';
@@ -25,6 +25,17 @@ const DOORWAY = {
   open: 0.75,
   lead: 0.65,
   push: 0.75,
+};
+
+/** Through a lift's sliding doors: where they wait on the landing (across the opening from its middle, out into the
+ *  room), where they walk off to once out, out of sight beside the opening, and how long the doors take. */
+const LIFT = {
+  out: [0, -0.7] as [number, number],
+  /** How far into the room they step before walking on (the door mark). */
+  inside: 0.38,
+  away: [-1.15, -0.85] as [number, number],
+  open: 0.9,
+  shut: 0.8,
 };
 
 /** How far behind each seat its backrest is, at each of `BACK_HEIGHTS`, so whoever sits there can lean back into it. */
@@ -99,7 +110,7 @@ export class Stage {
   /** Who gives way to whom, so nobody walks through anybody. Whoever's working a door keeps to their way. */
   private crowd = new Crowd((a) => Object.values(this.actors).includes(a) && !this.atDoor(a), (a) => this.seatOf(a));
   /** Who's going through a door right now, and which; their turn ends when they're told to do anything else. */
-  private doorWork = new Map<CharacterId, { door: Door; turn: number }>();
+  private doorWork = new Map<CharacterId, { door: Door | SlidingDoor; turn: number }>();
   private doorTurns = 0;
   /** One at a time through each door: the next in line waits for whoever's going through. */
   private doorQueue = new Map<Door, Promise<void>>();
@@ -109,6 +120,8 @@ export class Stage {
   private exited: CharacterId[] = [];
   /** A door shutting (for its sound). */
   onDoorShut: (() => void) | null = null;
+  /** A lift's doors starting to slide open (for its chime). */
+  onDoorOpen: (() => void) | null = null;
 
   constructor(private scene: THREE.Scene) {
     this.sets = buildSets();
@@ -671,7 +684,8 @@ export class Stage {
     const name = this.resolveMark(target && target !== this.current.door ? target : 'center', id);
     const doorName = this.entrance(name), door = this.current.marks[doorName];
     const swing = this.current.doors?.[doorName];
-    if (swing && !instant) return this.throughDoor(id, swing, (turn) => this.comeIn(id, swing, doorName, name, turn));
+    if (swing && !instant) return this.throughDoor(id, swing, (turn) => swing instanceof SlidingDoor
+      ? this.stepIn(id, swing, doorName, name, turn) : this.comeIn(id, swing, doorName, name, turn));
     const a = this.actors[id];
     const pos = door.pos.clone();
     pos.y = this.floorY(pos.x, pos.z);
@@ -720,6 +734,11 @@ export class Stage {
     return this.doorWork.has(id);
   }
 
+  /** The way in is a lift's doors, which chime by themselves as they open (see `onDoorOpen`). */
+  get liftDoors() {
+    return this.current.doors?.[this.current.door] instanceof SlidingDoor;
+  }
+
   /** Who has walked out through the door since the last call: they're gone, and the room is the rest. */
   takeExits() {
     return this.exited.splice(0);
@@ -739,7 +758,8 @@ export class Stage {
     this.outgoing.add(id);
     const version = this.sceneVersion, door = this.entrance(this.actorMark.get(id));
     const swing = this.current.doors?.[door];
-    if (swing) return this.throughDoor(id, swing, (turn) => this.goOut(id, swing, door, turn));
+    if (swing) return this.throughDoor(id, swing, (turn) => swing instanceof SlidingDoor
+      ? this.stepOut(id, swing, door, turn) : this.goOut(id, swing, door, turn));
     await this.walkTo(id, door);
     // A skipped scene or a subsequent move must not let an old exit hide the new cast.
     if (version !== this.sceneVersion || this.actorMark.get(id) !== door) return;
@@ -752,10 +772,12 @@ export class Stage {
     return false;
   }
 
-  /** Wait for the door to be free, then go through it. `go` checks it's still their turn after every step. */
-  private throughDoor(id: CharacterId, door: Door, go: (turn: number) => Promise<void>) {
+  /** Wait for the door to be free, then go through it. `go` checks it's still their turn after every step. (A lift's
+   *  doors let everyone through together: nobody waits for them.) */
+  private throughDoor(id: CharacterId, door: Door | SlidingDoor, go: (turn: number) => Promise<void>) {
     const turn = ++this.doorTurns;
     this.doorWork.set(id, { door, turn });
+    if (door instanceof SlidingDoor) return go(turn);
     const done = (this.doorQueue.get(door) ?? Promise.resolve()).then(() => this.doorWork.get(id)?.turn === turn ? go(turn) : undefined);
     this.doorQueue.set(door, done.catch(() => {}));
     return done;
@@ -770,8 +792,24 @@ export class Stage {
     const a = this.actors[id];
     a.grab(null);
     a.turnTo = null;
-    if (work.door.angle > 0.01) void work.door.swing(0, 0.9);
+    if (work.door instanceof SlidingDoor) this.shut(work.door);
+    else if (work.door.angle > 0.01) void work.door.swing(0, 0.9);
     else work.door.hold(null);
+  }
+
+  /** A lift's doors slide open, unless they're open already (chiming as they start). */
+  private openLift(door: SlidingDoor) {
+    if (door.target < 0.01) this.onDoorOpen?.();
+    return door.slide(1, LIFT.open);
+  }
+
+  /** A lift's doors slide shut once nobody else is going through them. */
+  private shut(door: SlidingDoor) {
+    for (const w of this.doorWork.values()) if (w.door === door) return;
+    if (door.open < 0.01) return;
+    void door.slide(0, LIFT.shut).then(() => {
+      if (door.open < 0.01) this.onDoorShut?.();
+    });
   }
 
   /** Done with the door, which is shut. */
@@ -835,6 +873,43 @@ export class Stage {
     await door.swing(0, 0.2);
     if (!still()) return;
     this.doneWithDoor(id);
+    this.gone(id);
+  }
+
+  /** In through a lift's doors: waiting on the landing as they slide open, then stepping in while they slide shut. */
+  private async stepIn(id: CharacterId, door: SlidingDoor, doorName: string, name: string, turn: number) {
+    const a = this.actors[id], version = this.sceneVersion;
+    const still = () => this.sceneVersion === version && this.doorWork.get(id)?.turn === turn;
+    // (two coming in together wait side by side)
+    let side = -1;
+    for (const w of this.doorWork.values()) if (w.door === door) side++;
+    const x = LIFT.out[0] + [0, -0.4, 0.4][side % 3];
+    a.place(door.at(x, LIFT.out[1]), door.facing, null);
+    a.root.visible = true;
+    this.occupy(id, doorName);
+    await this.openLift(door);
+    if (!still()) return;
+    await a.walk([door.at(x, LIFT.inside)], { facing: door.facing, seat: null });
+    if (!still()) return;
+    this.doorWork.delete(id);
+    this.shut(door);
+    return this.walkTo(id, name);
+  }
+
+  /** Out through a lift's doors: up to them, they slide open, out onto the landing and off to the side as they shut. */
+  private async stepOut(id: CharacterId, door: SlidingDoor, doorName: string, turn: number) {
+    const a = this.actors[id], version = this.sceneVersion;
+    const still = () => this.sceneVersion === version && this.doorWork.get(id)?.turn === turn;
+    await this.walkTo(id, doorName, { pos: this.current.marks[doorName].pos.clone(), facing: door.facing + Math.PI });
+    if (!still()) return;
+    await this.openLift(door);
+    if (!still()) return;
+    await a.walk([door.at(...LIFT.out)], { facing: a.facing, seat: null });
+    if (!still()) return;
+    this.doorWork.delete(id);
+    this.shut(door);
+    await a.walk([door.at(...LIFT.away)], { facing: a.facing, seat: null });
+    if (version !== this.sceneVersion || this.actorMark.get(id) !== doorName) return;
     this.gone(id);
   }
 

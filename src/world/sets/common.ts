@@ -55,8 +55,9 @@ export interface StageSet {
   reserved?: string[];
   /** Separate vehicle compartments use their own door. No route crosses a solid partition. */
   entrances?: Record<string, string>;
-  /** Doors on hinges, by the door mark they lead in from: people open them by hand on the way in and out. */
-  doors?: Record<string, Door>;
+  /** Doors, by the door mark they lead in from: on hinges, opened by hand on the way in and out, or a lift's doors
+   *  that slide apart by themselves. */
+  doors?: Record<string, Door | SlidingDoor>;
   setTime(t: TimeOfDay): void;
   update?(dt: number, t: number): void;
   /** Floor height at a point, for sets with raised areas (defaults to 0). */
@@ -298,6 +299,79 @@ export class Door extends THREE.Group {
     }
     this.leaf.rotation.y = this.hinge * this.angle;
     this.beyond.visible = this.angle > 0.002;
+  }
+}
+
+/**
+ * A lift's doors: two leaves that slide apart from the middle into pockets behind the wall, onto whatever's built
+ * beyond (a landing). In its own space the wall is at z = 0 with the room toward +z and the opening centered on
+ * x = 0; the leaves run just behind the wall. Nobody touches them: they open, people step through, they close.
+ */
+export class SlidingDoor extends THREE.Group {
+  readonly leaves: THREE.Group[] = [];
+  /** How far open, from 0 (shut) to 1. */
+  open = 0;
+  private sliding: { from: number; to: number; t: number; dur: number; done: () => void } | null = null;
+
+  constructor(readonly width: number, height: number, leaf: THREE.Material, edge: THREE.Material) {
+    super();
+    for (const s of [-1, 1]) {
+      // (each leaf a touch wider than half the opening, out under the frame; the two meet in the middle)
+      const L = new THREE.Group();
+      L.add(mesh(box(width / 2 + 0.02, height, 0.03), leaf, s * (width / 4 + 0.01), height / 2, -0.02, false));
+      L.add(mesh(box(0.012, height, 0.034), edge, s * 0.006, height / 2, -0.02, false));
+      this.leaves.push(L);
+      this.add(L);
+    }
+  }
+
+  /** A spot on the floor, `x` across the opening from its middle and `v` out into the room (negative: beyond). */
+  at(x: number, v: number) {
+    this.updateWorldMatrix(true, false);
+    return this.localToWorld(new THREE.Vector3(x, 0, v)).setY(0);
+  }
+
+  /** Which way the doors face, into the room, as an actor's facing. */
+  get facing() {
+    this.updateWorldMatrix(true, false);
+    const n = new THREE.Vector3(0, 0, 1).transformDirection(this.matrixWorld);
+    return Math.atan2(n.x, n.z);
+  }
+
+  /** Where they're headed (or are, standing still), from 0 (shut) to 1 (open). */
+  get target() {
+    return this.sliding?.to ?? this.open;
+  }
+
+  /** Slide open (1) or shut (0), easing in and out, taking `seconds` for the whole way; resolves when they get there
+   *  (or are sent the other way). */
+  slide(to: number, seconds: number) {
+    this.sliding?.done();
+    return new Promise<void>((done) => {
+      this.sliding = { from: this.open, to, t: 0, dur: Math.max(0.01, seconds * Math.abs(to - this.open)), done };
+    });
+  }
+
+  /** Shut, at once. */
+  reset() {
+    this.sliding?.done();
+    this.sliding = null;
+    this.open = 0;
+    this.update(0);
+  }
+
+  update(dt: number) {
+    const s = this.sliding;
+    if (s) {
+      s.t += dt;
+      const k = Math.min(1, s.t / s.dur);
+      this.open = s.from + (s.to - s.from) * k * k * (3 - 2 * k);
+      if (k >= 1) {
+        this.sliding = null;
+        s.done();
+      }
+    }
+    this.leaves.forEach((L, i) => { L.position.x = (i ? 1 : -1) * this.open * (this.width / 2 + 0.03); });
   }
 }
 
