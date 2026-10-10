@@ -899,7 +899,8 @@ export class Player {
     }
 
     this.director.fresh();
-    this.director.coverage(this.stage.castIds());
+    // (a new scene opens on the master: the whole set, and who's where in it)
+    this.director.coverage(this.stage.castIds(), true, true);
     this.overlay.year(onCouch);
     if (card?.label) this.overlay.location(card.label, card.look);
     else this.overlay.hideLocation();

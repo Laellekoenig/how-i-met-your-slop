@@ -34,12 +34,72 @@ interface ActiveShot extends Framing {
   tidy?: boolean;
   /** Where the shot was framed when we cut to it, before any jog, push or drift. */
   base?: Framing;
+  /** A wide worked out for the people in it (see `Director.groupShot`), not one of the set's authored angles. */
+  group?: boolean;
 }
+
+const look = (f: Framing) => f.target.clone().sub(f.pos).normalize();
 
 /** Two framings a viewer can't tell apart: cutting from one to the other only reads as a jump. */
 function sameFraming(a: Framing, b: Framing) {
-  const look = (f: Framing) => f.target.clone().sub(f.pos).normalize();
   return a.pos.distanceTo(b.pos) < 0.25 && look(a).angleTo(look(b)) < 0.07 && Math.abs(a.fov - b.fov) < 4;
+}
+
+/** Two wides near enough alike (the same side, about the same size) that cutting from one to the other reads as a
+ *  jump cut, not a new angle. */
+export function nearFraming(a: Framing, b: Framing) {
+  return a.pos.distanceTo(b.pos) < 0.9 && look(a).angleTo(look(b)) < 0.2 && Math.abs(a.fov - b.fov) < 0.25 * Math.max(a.fov, b.fov);
+}
+
+/** A group shot has to show its people at least this much bigger than the tightest authored wide holding them all,
+ *  or that wide is the shot. */
+const GROUP_GAIN = 1.3;
+/** Two people get a group shot only when no authored wide shows them bigger than this (see `Director.size`). */
+const GROUP_PAIR = 0.2;
+/** Someone further than this (m) from everyone else in the group is off on their own across the set (at the door,
+ *  in the kitchen, while the rest are on the couch): that's the master, not a group shot. */
+const GROUP_STRAY = 3.2;
+/** A group spread wider than this (m) from end to end is the whole room. */
+const GROUP_SPREAD = 6.5;
+/** Group shot lenses to try, vertical field of view in degrees. */
+const GROUP_LENSES = [30, 36, 42, 50];
+/** Where in the picture (from -1 at the bottom to 1 at the top) the tallest head in a group shot tops out, at most: a
+ *  little headroom above it. */
+const GROUP_HEADROOM = 0.78;
+/** ... and where the lowest knees in it sit, at most: not up over a stretch of empty floor. */
+const GROUP_FLOOR = -0.6;
+/** How far out to each side of someone's head their shoulders reach (m), with a little room: a group shot keeps them
+ *  in. */
+const GROUP_SHOULDER = 0.3;
+/** The closest (m) a group shot's lens comes to the nearest head in it: the wide camera stands back on the audience's
+ *  side of the furniture, not in among the people. */
+const GROUP_NEAREST = 2.2;
+/** Someone turned further than this from the lens (cos of 75 degrees: hardly any face) is seen from behind. */
+const GROUP_AWAY = Math.cos(THREE.MathUtils.degToRad(75));
+/** Someone seen from behind in a group shot keeps to the outer quarter of the picture on either side: at least this far
+ *  out from the middle, as a fraction of the half-width. */
+const GROUP_SIDE = 0.5;
+/** How near the lens (m) set dressing may stand in a group shot's picture: none at all in the foreground. */
+const GROUP_DRESSING = 1.5;
+
+const UP = new THREE.Vector3(0, 1, 0), DOWN = new THREE.Vector3(0, -1, 0);
+/** Which way someone's body faces, flat. */
+const forward = (a: Actor) => new THREE.Vector3(Math.sin(a.facing), 0, Math.cos(a.facing));
+/** Which way someone's face is turned, flat: their body, and most of the way round to whoever they're looking at (as
+ *  far as a neck goes; see the actor's look-at). */
+function faceForward(a: Actor) {
+  if (!a.lookAt) return forward(a);
+  const p = a.position, toward = Math.atan2(a.lookAt.x - p.x, a.lookAt.z - p.z);
+  const turn = Math.atan2(Math.sin(toward - a.facing), Math.cos(toward - a.facing));
+  const yaw = a.facing + 0.8 * Math.max(-1.2, Math.min(1.2, turn));
+  return new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+}
+/** Seen from behind from here, body or face (the back of a head talking to someone further in reads as a back too),
+ *  or about to be: turning round. */
+function turnedAway(from: THREE.Vector3, a: Actor) {
+  const lens = from.clone().sub(a.headWorld).setY(0).normalize();
+  const turning = new THREE.Vector3(Math.sin(a.targetFacing), 0, Math.cos(a.targetFacing));
+  return Math.min(lens.dot(forward(a)), lens.dot(faceForward(a)), lens.dot(turning)) < GROUP_AWAY;
 }
 
 /** The shortest a shot stays up on the show, in seconds: anything briefer reads as a glitch, not an edit. */
@@ -147,31 +207,219 @@ export class Director {
     this.cut({ kind: 'wide', pos: w.pos.clone(), target: w.target.clone(), fov: w.fov, push, subjects: this.stage.castIds() });
   }
 
+  /** A wide of these people, unless the one already up (or about to be) holds them all and is so nearly the same that
+   *  cutting to it would only be a jump. (A group shot that has gone wrong since, someone turned their back on it in
+   *  the middle of the picture, isn't held.) */
+  private wideOn(shot: Framing, actors: Actor[], group = false) {
+    const on = this.current;
+    if (on?.kind === 'wide' && !on.push && !sameFraming(on, shot) && nearFraming(on.base ?? on, shot) && this.covers(on, actors)
+      && !(on.group && actors.some((a) => this.backInMiddle(on, a)))) {
+      on.subjects = actors.map((a) => a.def.id);
+      return;
+    }
+    this.cut({ kind: 'wide', pos: shot.pos.clone(), target: shot.target.clone(), fov: shot.fov, push: 0, group, subjects: actors.map((a) => a.def.id) });
+  }
+
   establish(s: EstablishingShot, moving = true) {
     this.cut({ kind: 'establishing', pos: s.pos.clone(), target: s.target.clone(), fov: s.fov, push: 0, drift: moving ? s : undefined }, true);
   }
 
-  /** Prefer a tight authored angle only when every subject is framed and unobstructed. */
-  coverage(ids: CharacterId[], allowCloseup = true) {
+  /** The wide for these people. A cluster of them sitting or standing together gets a group shot framed on them (see
+   *  `groupShot`) when it's clean and shows them clearly bigger than any authored wide; otherwise it's the tightest
+   *  authored angle with every one of them framed and unobstructed. `master` keeps to the authored wides: the first
+   *  shot of a scene, or the writer asking for the whole room. */
+  coverage(ids: CharacterId[], allowCloseup = true, master = false) {
     const actors = ids.filter((id) => this.stage.onStage(id)).map((id) => this.stage.actors[id]);
     if (!actors.length) return this.wide(0);
     const wides = this.stage.current.wides;
     const moving = actors.filter((a) => a.isWalking);
-    let best = 0, score = -1;
+    let best = 0, score = -1, all = false;
     for (let i = wides.length - 1; i >= 0; i--) {
       const shot = wides[i];
       const visible = actors.filter((a) => this.covers(shot, [a]));
-      if (visible.length === actors.length) { best = i; break; }
+      if (visible.length === actors.length) { best = i; all = true; break; }
       const value = visible.length + visible.filter((a) => a.isWalking).length * (actors.length + 1);
       if (value >= score) { score = value; best = i; }
+    }
+    // (anyone on the move, coming, going or crossing the room, is watched from the authored angles)
+    if (!master && !moving.length && !actors.some((a) => this.stage.atTheDoor(a.def.id))) {
+      // (a pair has its two-shot as well: their wide stays the authored one, unless that's a far-off master)
+      const authored = all ? this.size(wides[best], actors) : 0;
+      const group = actors.length > 2 || authored < GROUP_PAIR ? this.groupShot(actors) : null;
+      if (group && this.size(group, actors) >= GROUP_GAIN * authored) return this.wideOn(group, actors, true);
     }
     // Someone on their way out is watched from a wide, never chased to the door in a single.
     const staying = actors.filter((a) => !this.leaving(a));
     const priority = moving.filter((a) => !this.leaving(a));
     if (!priority.length) priority.push(...staying.slice(0, 1));
     if (allowCloseup && priority.length && !priority.every((a) => this.covers(wides[best], [a]))) return this.closeup(priority[0].def.id);
-    this.wide(best);
-    this.shot!.subjects = actors.map((a) => a.def.id);
+    this.wideOn(wides[best], actors);
+  }
+
+  /** The top of someone's head, hair and all, with a touch to spare. */
+  private crown(a: Actor) {
+    return a.headWorld.add(new THREE.Vector3(0, 0.16, 0));
+  }
+
+  /** Where someone's body leaves the bottom of a group shot: mid-thigh standing, the knees sitting down. */
+  private knees(a: Actor) {
+    const p = a.position.clone();
+    if (a.seatHeight === null) p.y += 0.7 * a.legLen;
+    else p.add(new THREE.Vector3(Math.sin(a.facing) * 0.4, a.seatHeight + 0.1, Math.cos(a.facing) * 0.4));
+    return p;
+  }
+
+  /** How much of the picture's height people take up from here, from the tops of their heads to mid-thigh (or the
+   *  knees, sitting), on average: 0 to 1. */
+  private size(shot: Framing, actors: Actor[]) {
+    const cam = this.probe(shot.pos, shot.target, shot.fov);
+    return actors.reduce((sum, a) => sum + (this.crown(a).project(cam).y - this.knees(a).project(cam).y) / 2, 0) / actors.length;
+  }
+
+  /** A group shot worked out for these people, as the wide camera in a multi-camera sitcom frames the people in a
+   *  conversation: from the audience's side of them, or the side most of them face, holding their heads and bodies
+   *  down to mid-thigh with a little headroom. Of a few angles, heights and lenses, the one showing them biggest that's
+   *  clean (see `groupFault`). Null when there's no such shot, or no call for one: a cabin (its own mounts), one
+   *  person, someone on the move, or people spread across the set. */
+  groupShot(actors: Actor[]): Framing | null {
+    const set = this.stage.current;
+    if (set.cameraBounds || set.dialogueCameras || actors.length < 2 || actors.length > 6 || actors.some((a) => a.isWalking)) return null;
+    const flat = actors.map((a) => new THREE.Vector2(a.position.x, a.position.z));
+    for (const [i, p] of flat.entries()) {
+      const others = flat.filter((_, j) => j !== i).map((q) => q.distanceTo(p));
+      if (Math.min(...others) > GROUP_STRAY || Math.max(...others) > GROUP_SPREAD) return null;
+    }
+    const audience = new THREE.Vector3(0, 0, 1);
+    const facing = actors.reduce((sum, a) => sum.add(forward(a)), new THREE.Vector3());
+    const sides = [audience];
+    if (facing.length() > 0.4 * actors.length && facing.angleTo(audience) > 0.3) sides.push(facing.normalize());
+    const dirs: THREE.Vector3[] = [];
+    for (const side of sides) for (const turn of [0, 0.35, -0.35, 0.7, -0.7]) {
+      const d = side.clone().applyAxisAngle(UP, turn);
+      if (!dirs.some((o) => o.angleTo(d) < 0.15)) dirs.push(d);
+    }
+    const eye = actors.reduce((sum, a) => sum + a.headWorld.y, 0) / actors.length;
+    const candidates: { shot: Framing; value: number }[] = [];
+    for (const dir of dirs) {
+      // (people with their backs to this side: fine at the edge of a group, not as a rule)
+      const backs = actors.filter((a) => forward(a).dot(dir) < -0.3).length;
+      if (backs > actors.length / 2) continue;
+      for (const [high, lift] of [0.15, 0.5, 0.85].entries()) for (const fov of GROUP_LENSES) {
+        const shot = this.frameGroup(actors, dir, Math.min(2.1, Math.max(1.2, eye + lift)), fov);
+        if (!shot) continue;
+        // (straight on from the audience, about eye level, reads best; the further round, the higher, and the more
+        // backs, the less)
+        const value = this.size(shot, actors) * (1 - 0.06 * dir.angleTo(sides[0])) * (1 - 0.08 * backs) * (1 - 0.03 * high)
+          * (fov === GROUP_LENSES[0] || fov === GROUP_LENSES.at(-1) ? 0.97 : 1);
+        candidates.push({ shot, value });
+      }
+    }
+    candidates.sort((a, b) => b.value - a.value);
+    for (const { shot } of candidates) if (!this.groupFault(shot, actors)) return shot;
+    return null;
+  }
+
+  /** Frame a group from `dir` (the side the lens looks at them from), at a given height and lens: aimed across the
+   *  middle of them, backed off just far enough to hold everyone, heads to knees and shoulder to shoulder (and never
+   *  right on top of them), then tilted so the tallest head has a little headroom. */
+  private frameGroup(actors: Actor[], dir: THREE.Vector3, height: number, fov: number): Framing | null {
+    const across = new THREE.Vector3(-dir.z, 0, dir.x);
+    const crowns = actors.map((a) => this.crown(a)), knees = actors.map((a) => this.knees(a));
+    const shoulders = actors.flatMap((a) => [-1, 1].map((side) => a.headWorld.addScaledVector(across, side * GROUP_SHOULDER).setY(a.headWorld.y - 0.35)));
+    const points = [...crowns, ...knees, ...shoulders];
+    const middle = (axis: THREE.Vector3) => {
+      const v = points.map((p) => p.dot(axis));
+      return (Math.min(...v) + Math.max(...v)) / 2;
+    };
+    const target = across.clone().multiplyScalar(middle(across)).addScaledVector(dir, middle(dir));
+    target.y = (Math.max(...crowns.map((p) => p.y)) + Math.min(...knees.map((p) => p.y))) / 2;
+    const at = (dist: number) => target.clone().addScaledVector(dir, dist).setY(height);
+    const fits = (pos: THREE.Vector3, aim: THREE.Vector3) => {
+      const cam = this.probe(pos, aim, fov);
+      return points.every((p) => {
+        const v = p.clone().project(cam);
+        return Math.abs(v.x) < 0.84 && v.y > -0.88 && v.y < GROUP_HEADROOM + 0.04 && v.z > -1 && v.z < 1;
+      });
+    };
+    let lo = 1, hi = 14;
+    if (!fits(at(hi), target)) return null;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(at(mid), target)) hi = mid;
+      else lo = mid;
+    }
+    // (a camera on the audience's side of the furniture, not in among the people)
+    const nearest = Math.min(...actors.map((a) => a.headWorld.distanceTo(at(hi))));
+    if (nearest < GROUP_NEAREST) hi += GROUP_NEAREST - nearest;
+    const pos = at(hi);
+    // A tall group (people standing) has room to spare above them: tilt down until the tallest head is just under
+    // the headroom. A long one (a row of people sitting) stays in the middle of the picture, not up at the top of it
+    // over a stretch of empty floor.
+    const cam = this.probe(pos, target, fov);
+    const top = Math.max(...crowns.map((p) => p.clone().project(cam).y)), bottom = Math.min(...knees.map((p) => p.clone().project(cam).y));
+    const raise = Math.min(GROUP_HEADROOM - top, GROUP_FLOOR - bottom);
+    // (as far as it goes with everyone still in: tilting swings the people out at the sides further out)
+    const drop = raise * Math.tan(THREE.MathUtils.degToRad(fov / 2)) * pos.distanceTo(target);
+    const tilted = (t: number) => target.clone().setY(target.y - t * drop);
+    let tilt = 0;
+    if (drop > 0) {
+      let out = 1;
+      if (fits(pos, tilted(1))) tilt = 1;
+      else for (let i = 0; i < 6; i++) {
+        const t = (tilt + out) / 2;
+        if (fits(pos, tilted(t))) tilt = t;
+        else out = t;
+      }
+    }
+    target.copy(tilted(tilt));
+    return { pos, target, fov };
+  }
+
+  /** What's wrong with a group shot, if anything (an empty string: we can cut to it). The lens must stand on the floor
+   *  of the set, not on the furniture; everyone must be in frame and in view, with nobody's head across anybody's
+   *  face, nobody seen from behind anywhere but out at the side (and never in front of anyone else), and nobody else
+   *  in front of them; no furniture across anyone's face or chest, no dressing in front of anyone, across the picture
+   *  or right under the lens; and scenery behind them. */
+  private groupFault(shot: Framing, actors: Actor[]) {
+    if (!this.inside(shot.pos)) return 'outside';
+    const cam = this.probe(shot.pos, shot.target, shot.fov);
+    const half = Math.tan(THREE.MathUtils.degToRad(shot.fov / 2));
+    // Heads in the picture, in its own units (up and across alike), with how far each reaches out from its middle.
+    const heads = this.people().map((o) => {
+      const distance = o.headWorld.distanceTo(shot.pos), v = o.headWorld.project(cam);
+      const chin = o.headWorld.add(new THREE.Vector3(0, -0.24, 0)).project(cam);
+      const back = turnedAway(shot.pos, o);
+      return { o, distance, back, front: v.z > -1 && v.z < 1, x: v.x * cam.aspect, y: v.y, cx: chin.x * cam.aspect, cy: chin.y, r: 0.14 / (distance * half) };
+    });
+    const nearest = Math.min(...heads.filter((h) => actors.includes(h.o)).map((h) => h.distance));
+    for (const h of heads) {
+      if (!h.front) continue;
+      const member = actors.includes(h.o);
+      // somebody who isn't in the group, nearer the lens than any of them, with their head in the picture
+      if (!member && h.distance < nearest && Math.abs(h.x) < cam.aspect + h.r && Math.abs(h.y) < 1 + h.r) return 'foreground';
+      // someone seen from behind: only out at the side of the picture (and never in front of anyone: see bodyBlocked)
+      if (member && h.back && Math.abs(h.x) < GROUP_SIDE * cam.aspect) return 'back';
+      // a head in front of a face in the group (from the top of it down to the chin)
+      for (const f of heads) {
+        if (f === h || !actors.includes(f.o) || h.distance >= f.distance) continue;
+        const gap = new THREE.Line3(new THREE.Vector3(f.x, f.y, 0), new THREE.Vector3(f.cx, f.cy, 0))
+          .closestPointToPoint(new THREE.Vector3(h.x, h.y, 0), true, new THREE.Vector3()).distanceTo(new THREE.Vector3(h.x, h.y, 0));
+        if (gap < h.r + 0.6 * f.r) return 'heads';
+      }
+    }
+    this.ray.near = 0;
+    this.ray.far = shot.pos.y;
+    this.ray.set(shot.pos, DOWN);
+    const floor = this.ray.intersectObjects(this.stage.occluders(), false)[0];
+    if (floor && floor.point.y > (this.stage.current.floorAt?.(shot.pos.x, shot.pos.z) ?? 0) + 0.25) return 'furniture';
+    if (!this.covers(shot, actors)) return 'hidden';
+    if (actors.some((a) => this.bodyBlocked(cam, a, actors.filter((o) => o !== a)))) return 'body';
+    const front = actors.reduce((a, b) => (a.headWorld.distanceTo(shot.pos) < b.headWorld.distanceTo(shot.pos) ? a : b));
+    if (actors.some((a) => this.screened(shot.pos, a, true))) return 'screened';
+    if (this.clutter(shot, front) > MAX_CLUTTER) return 'clutter';
+    // (beer taps, a lamp, standing big and soft across the foreground)
+    if (this.inView(cam, GROUP_DRESSING).some((o) => o.userData.dressing)) return 'dressing';
+    return this.hasBackdrop(shot) ? '' : 'backdrop';
   }
 
   private framePoints(actors: Actor[]) {
@@ -307,14 +555,37 @@ export class Director {
   }
 
 
-  /** A lamp, a beer tap or a plant standing in front of someone's face, neck or chest from here: small, but right
-   *  across the middle of their single. (A table or a bar in front of them doesn't count.) */
-  private screened(from: THREE.Vector3, a: Actor) {
+  /** Scenery (a chair back, the arm of a sofa, a bar) or one of the `others` (someone in the foreground with their
+   *  back to us, a shoulder) standing between the lens and someone's face, neck or chest. Whatever is lower than their
+   *  chest (a table in front of them sitting down) doesn't count. */
+  private bodyBlocked(cam: THREE.PerspectiveCamera, a: Actor, others: Actor[]) {
+    const from = cam.position, head = a.headWorld;
+    const across = head.clone().sub(from).setY(0).normalize();
+    across.set(-across.z, 0, across.x);
+    const objects: THREE.Object3D[] = [...this.inView(cam, head.distanceTo(from)), ...others.flatMap((o) => o.bodyMeshes)];
+    for (const o of others) o.root.updateWorldMatrix(true, true);
+    this.ray.near = 0;
+    for (const [side, down] of [[0, 0], [0, 0.25], [0, 0.45], [0.15, 0.45], [-0.15, 0.45]]) {
+      const to = head.clone().addScaledVector(across, side);
+      to.y -= down;
+      const dir = to.clone().sub(from);
+      this.ray.far = dir.length() - 0.15;
+      this.ray.set(from, dir.normalize());
+      if (this.ray.intersectObjects(objects, false).some((hit) => hit.point.y > to.y - 0.05)) return true;
+    }
+    return false;
+  }
+
+  /** A lamp, a beer tap or a plant standing in front of someone's face, neck or chest from here (or their middle, for
+   *  a `body` shot): small, but right across the middle of their single. (A table or a bar in front of them doesn't
+   *  count.) */
+  private screened(from: THREE.Vector3, a: Actor, body = false) {
     const dressing = this.stage.occluders().filter((o) => o.userData.dressing);
     if (!dressing.length) return false;
     const head = a.headWorld, across = head.clone().sub(from).setY(0).normalize();
     across.set(-across.z, 0, across.x);
-    for (const [side, down] of [[0, 0], [0, 0.25], [0, 0.45], [0.18, 0.35], [-0.18, 0.35]]) {
+    // (in a group shot, their middle too: a row of beer taps across their chests)
+    for (const [side, down] of [[0, 0], [0, 0.25], [0, 0.45], [0.18, 0.35], [-0.18, 0.35], ...body ? [[0, 0.65], [0.15, 0.6], [-0.15, 0.6]] : []]) {
       const to = head.clone().addScaledVector(across, side);
       to.y -= down;
       const dir = to.clone().sub(from);
@@ -580,7 +851,7 @@ export class Director {
     switch (shot) {
       case 'closeup': return this.closeup(subject, other);
       case 'push_in': return this.pushIn(subject, other);
-      case 'wide': return this.coverage(this.stage.castIds(), false);
+      case 'wide': return this.coverage(this.stage.castIds(), false, true);
       case 'two': {
         const partner = other && other !== subject && this.stage.onStage(other) ? other : this.nearest(subject);
         return partner ? this.twoShot(subject, partner) : this.closeup(subject);
@@ -595,6 +866,11 @@ export class Director {
     if (on.length === 1) this.closeup(on[0], toward);
     else if (on.length === 2) this.twoShot(on[0], on[1]);
     else if (on.length) this.coverage(on, false);
+  }
+
+  /** Someone seen from behind in the middle of a shot, not out at the side where a group shot allows a back. */
+  private backInMiddle(shot: Framing, a: Actor) {
+    return turnedAway(shot.pos, a) && Math.abs(a.headWorld.project(this.probe(shot.pos, shot.target, shot.fov)).x) < GROUP_SIDE;
   }
 
   /** On their way out the door. */
@@ -719,6 +995,11 @@ export class Director {
       if (moving.length && !this.covers(s, moving)) {
         this.lastReframe = this.time;
         this.coverage(ids);
+      } else if (s.group && dt > 0 && ids.some((id) => this.backInMiddle(s, this.stage.actors[id]))) {
+        // Someone in a group shot has turned their back on it, in the middle of the picture (to talk to someone
+        // behind them): look again, and settle for the authored wide if there's no clean group shot now.
+        this.lastReframe = this.time;
+        this.coverage(ids, false);
       }
     }
     this.apply(dt);

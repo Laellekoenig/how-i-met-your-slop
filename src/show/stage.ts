@@ -702,6 +702,11 @@ export class Stage {
     return this.outgoing.has(id) && this.onStage(id);
   }
 
+  /** Someone opening a door, going through it or shutting it behind them: coming or going, even when not walking. */
+  atTheDoor(id: CharacterId) {
+    return this.doorWork.has(id);
+  }
+
   /** Who has walked out through the door since the last call: they're gone, and the room is the rest. */
   takeExits() {
     return this.exited.splice(0);
