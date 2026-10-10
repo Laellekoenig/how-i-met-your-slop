@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, mesh, occluder, toon } from '../../engine/materials';
 import { blueprint, clockFace, lectureChalkboard, paneling, speckle } from '../../engine/textures';
-import { door, keyLight, mark, nodes, room, type Mark, type StageSet, v3 } from './common';
+import { door, fillLight, keyLight, mark, nodes, room, type Mark, type StageSet, v3 } from './common';
 import { chair, label, mug } from './furnishings';
 
 // "Definitions" / "Robin 101": long dark chalkboards, cream walls, wood paneling,
@@ -75,6 +75,8 @@ export function buildLectureHall(): StageSet {
   }
   const hemi = new THREE.HemisphereLight('#f4eedb', '#596053', 1.85); g.add(hemi);
   keyLight(g, '#fff1d5', 2.15, [-2, 7, 5], [0, 0, -2]);
+  // the students face the board, away from the key: light the reverse on them from the front of the room
+  fillLight(g, '#fff1d5', 1.3, [1, 6, -7], [0, 1, 3]);
   return {
     id: 'lecture_hall', name: "Ted's Lecture Hall", group: g, nodes: N, edges, marks, floorAt, door: 'door', doors: { door: front },
     wides: [

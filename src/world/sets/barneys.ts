@@ -18,7 +18,7 @@ export function buildBarneys(): StageSet {
   const LEFT = -6.4, RIGHT = 6.6, BACK = -4.2, FRONT = 4.5;
   const OPEN_H = 2.65; // top of the terrace doors
 
-  const wallMat = toon('#33363c');
+  const wallMat = toon('#3d4048');
   const black = toon('#141416');
   const chrome = toon('#c4c8ce');
   const espresso = toon('#2a1d18');
@@ -29,7 +29,7 @@ export function buildBarneys(): StageSet {
   const white = toon('#eeeeec');
 
   // ---- shell -----------------------------------------------------------------------------
-  const floor = mesh(new THREE.PlaneGeometry(RIGHT - LEFT, FRONT - BACK), toon('#ffffff', { map: planks('#34221c', [9, 7], 31) }), (LEFT + RIGHT) / 2, 0, (FRONT + BACK) / 2);
+  const floor = mesh(new THREE.PlaneGeometry(RIGHT - LEFT, FRONT - BACK), toon('#ffffff', { map: planks('#38261f', [9, 7], 31) }), (LEFT + RIGHT) / 2, 0, (FRONT + BACK) / 2);
   floor.rotation.x = -Math.PI / 2;
   floor.castShadow = false;
   g.add(floor);
@@ -491,15 +491,15 @@ export function buildBarneys(): StageSet {
   frame(g, RIGHT - 0.03, 1.75, 2.1, 0.8, 1.0, 64, -Math.PI / 2, '#101012');
 
   // ---- ceiling cans and lights ---------------------------------------------------------------
-  const cans: [number, number][] = [[-4.4, -2.6], [-2.3, -0.9], [-0.2, -2.6], [-4.4, 0.8], [-0.2, 0.8], [3.4, -2.6], [4.9, -2.0], [5.4, 0.0]];
+  const cans: [number, number][] = [[-4.4, -2.6], [-2.3, -0.9], [-0.2, -2.6], [-4.4, 0.8], [-2.3, 1.4], [-0.2, 0.8], [3.4, -2.6], [4.9, -2.0], [5.4, 0.0]];
   for (const [x, z] of cans) {
     g.add(mesh(cyl(0.09, 0.09, 0.02, 8), glow('#fff2d6', 1.3), x, H - 0.01, z, false));
     g.add(mesh(new THREE.TorusGeometry(0.1, 0.015, 3, 8).rotateX(Math.PI / 2), black, x, H - 0.012, z, false));
   }
-  const hemi = new THREE.HemisphereLight('#b8c4e0', '#2a1e18', 1.1);
+  const hemi = new THREE.HemisphereLight('#dcd8dc', '#3a2a20', 1.55);
   g.add(hemi);
-  const key = keyLight(g, '#eef0ff', 1.5, [1.5, 7, 7], [-0.5, 0, -2]);
-  for (const [x, y, z, i] of [[-2.3, 2.9, -0.9, 3], [4.0, 2.9, -2.3, 4], [5.4, 2.9, 0.0, 3]] as const) {
+  const key = keyLight(g, '#fff2e2', 1.8, [1.5, 7, 7], [-0.5, 0, -2]);
+  for (const [x, y, z, i] of [[-2.3, 2.9, -0.9, 3], [-2.3, 2.9, 1.4, 2.5], [4.0, 2.9, -2.3, 4], [5.4, 2.9, 0.0, 3]] as const) {
     const l = new THREE.PointLight('#ffe6c0', i, 5.5, 1.4);
     l.position.set(x, y, z);
     g.add(l);
@@ -564,8 +564,8 @@ export function buildBarneys(): StageSet {
     setTime(t) {
       const night = t === 'night';
       backdrop.material = sideBackdrop.material = night ? nightSky : daySky;
-      hemi.intensity = night ? 1.1 : 1.9;
-      key.intensity = night ? 1.3 : 2.1;
+      hemi.intensity = night ? 1.55 : 2.0;
+      key.intensity = night ? 1.8 : 2.2;
       windowLight.color.set(night ? '#7a9aff' : '#fff2e0');
       windowLight.intensity = night ? 2 : 5;
       for (const l of lampLights) l.intensity = night ? 3 : 1.5;

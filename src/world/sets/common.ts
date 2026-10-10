@@ -362,6 +362,16 @@ export function plant(g: THREE.Group, x: number, z: number, scale = 1) {
   }
 }
 
+/** A soft fill from upstage with no shadows. A sitcom's lighting grid also lights faces turned away from the
+ *  audience, so the reverse angles on them read as well as the forward ones. */
+export function fillLight(g: THREE.Group, color: string, intensity: number, pos: [number, number, number], target: [number, number, number]) {
+  const l = new THREE.DirectionalLight(color, intensity);
+  l.position.set(...pos);
+  l.target.position.set(...target);
+  g.add(l, l.target);
+  return l;
+}
+
 export function keyLight(g: THREE.Group, color: string, intensity: number, pos: [number, number, number], target: [number, number, number]) {
   const l = new THREE.DirectionalLight(color, intensity);
   l.position.set(...pos);

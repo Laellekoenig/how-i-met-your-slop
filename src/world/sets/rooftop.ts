@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { toon, glow, box, mesh, roundedBox, cyl, occluder } from '../../engine/materials';
 import { brick, skyline, speckle, facade, tiles } from '../../engine/textures';
-import { type StageSet, mark, nodes, door, keyLight, v3 } from './common';
+import { type StageSet, mark, nodes, door, fillLight, keyLight, v3 } from './common';
 
 // The roof of the gang's building: tar and gravel inside a low brick parapet, Manhattan all around.
 // The stairwell bulkhead with its steel door sits stage left, the water tower on its stilts stage right.
@@ -201,6 +201,8 @@ export function buildRooftop(): StageSet {
   const hemi = new THREE.HemisphereLight('#8a9ac8', '#2a2420', 1.0);
   g.add(hemi);
   const key = keyLight(g, '#b8c8ff', 1.0, [-4, 9, 6], [0, 0, -1]);
+  // the city behind the parapet lights anyone turned to look out over it
+  const cityGlow = fillLight(g, '#a8b8e8', 0.9, [1, 4, -12], [0, 1, 2]);
   const fill = new THREE.PointLight('#ffd8b0', 2.5, 9, 1.3);
   fill.position.set(0.5, 2.6, 2.4);
   g.add(fill);
@@ -254,9 +256,11 @@ export function buildRooftop(): StageSet {
       for (const m of [backdrop, ...sides]) m.material = night ? nightSky : daySky;
       for (const tw of towers) tw.mesh.material = night ? tw.night : tw.day;
       hemi.color.set(night ? '#8a9ac8' : '#cfe4ff');
-      hemi.intensity = night ? 1.0 : 2.4;
+      hemi.intensity = night ? 1.35 : 2.4;
       key.color.set(night ? '#b8c8ff' : '#fff2dc');
-      key.intensity = night ? 1.0 : 2.6;
+      key.intensity = night ? 1.4 : 2.6;
+      cityGlow.color.set(night ? '#a8b8e8' : '#fff2dc');
+      cityGlow.intensity = night ? 0.9 : 1.0;
       for (const bb of bulbs) bb.material = night ? bulbOn : bulbOff;
       for (const l of stringLights) l.intensity = night ? 3 : 0;
       doorLight.intensity = night ? 3 : 0;

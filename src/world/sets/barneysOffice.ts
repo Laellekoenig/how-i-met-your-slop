@@ -302,8 +302,8 @@ export function buildBarneysOffice(): StageSet {
       const night = t === 'night';
       backdrop.material = night ? nightSky : daySky;
       slats.forEach((sl, i) => (sl.material = (night ? slatNight : slatDay)[i % 2]));
-      hemi.intensity = night ? 1.3 : 1.9;
-      key.intensity = night ? 1.4 : 2.0;
+      hemi.intensity = night ? 1.55 : 1.9;
+      key.intensity = night ? 1.65 : 2.0;
       windowLight.color.set(night ? '#7a9aff' : '#fff4e0');
       windowLight.intensity = night ? 1.5 : 4;
       for (const l of cubeLamps) l.intensity = night ? 2.2 : 1.2;

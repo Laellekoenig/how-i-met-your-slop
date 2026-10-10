@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, mesh, toon } from '../../engine/materials';
 import { facade, road, skyGradient, tiles } from '../../engine/textures';
-import { keyLight, mark, nodes, type StageSet, v3 } from './common';
+import { fillLight, keyLight, mark, nodes, type StageSet, v3 } from './common';
 import { buildWalkupExterior } from './walkupExterior';
 
 /** Playable sidewalk in front of the same basement pub / raised apartment entrance. */
@@ -49,6 +49,9 @@ export function buildMaclarensSidewalk(): StageSet {
   const hemi = new THREE.HemisphereLight('#c4d9e5', '#67604e', 2);
   g.add(hemi);
   const sun = keyLight(g, '#ffdeb4', 2.5, [-8, 14, 10], [0, 1, -2]);
+  // Faces turned toward the buildings: lit by the windows, the pub sign and the stoop lamps at night, and the
+  // sunlit street bouncing back off the brick by day.
+  const glowFill = fillLight(g, '#ffd9a8', 0, [1, 5, -9], [0, 1, 2]);
   return {
     id: 'maclarens_sidewalk',
     name: 'MacLaren’s Sidewalk',
@@ -98,9 +101,10 @@ export function buildMaclarensSidewalk(): StageSet {
       const night = t === 'night';
       for (const s of swaps) s.m.material = night ? s.night : s.day;
       for (const [l, i] of lights) l.intensity = night ? i : 0;
-      hemi.intensity = night ? 1.05 : 2;
+      hemi.intensity = night ? 1.5 : 2;
       hemi.color.set(night ? '#8c9bc4' : '#c4d9e5');
-      sun.intensity = night ? 0.7 : 2.5;
+      sun.intensity = night ? 1.2 : 2.5;
+      glowFill.intensity = night ? 1.1 : 0.8;
     },
   };
 }
