@@ -1337,6 +1337,13 @@ export class Actor {
    */
   doGesture(g: Motion | undefined, opts: { partner?: boolean; dur?: number; silent?: boolean; target?: Actor } = {}) {
     if (!g || !GESTURE_DUR[g]) return 0;
+    // Already holding this one (the phone still at their ear from the last line): it carries on for the new line,
+    // rather than coming down and going back up.
+    const on = this.gesture;
+    if (opts.dur && on?.g === g && !on.partner && !opts.partner && on.dur - on.t > 0.25) {
+      on.dur = Math.max(on.dur, on.t + opts.dur);
+      return opts.dur;
+    }
     // An implied drink is a real held prop, including after the sip has finished.
     if (!this.prop && (g === 'drink' || g === 'cheers' || g === 'spit_take')) this.holdingGlass = true;
     const dur = Math.max(GESTURE_DUR[g], opts.dur ?? 0);

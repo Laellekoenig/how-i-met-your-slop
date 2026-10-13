@@ -80,6 +80,13 @@ export function cyl(rTop: number, rBot: number, h: number, seg = 8) {
   return g;
 }
 
+/** Set dressing a single mustn't be framed through or beside: a potted plant, a studio camera. Tags every mesh under
+ *  `o`. (All scenery blocks the camera's view anyway; dressing also spoils a single from level with the subject.) */
+export function dressing<T extends THREE.Object3D>(o: T): T {
+  o.traverse((m) => (m.userData.dressing = true));
+  return o;
+}
+
 /** Mark meshes that should block the camera's view (for shot selection). */
 export function occluder<T extends THREE.Object3D>(o: T): T {
   o.userData.occluder = true;

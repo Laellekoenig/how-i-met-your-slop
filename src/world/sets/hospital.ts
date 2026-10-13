@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, mesh, toon } from '../../engine/materials';
 import { clockFace, tiles } from '../../engine/textures';
-import { door, keyLight, mark, nodes, plant, type StageSet, v3 } from './common';
+import { door, fillLight, keyLight, mark, nodes, plant, type StageSet, v3 } from './common';
 import { chair, label, mug } from './furnishings';
 import { ceilingPanel, interior, table } from './interior';
 
@@ -42,6 +42,7 @@ export function buildHospital(): StageSet {
   for (const x of [-3.5, 0, 3.5]) ceilingPanel(g, x, 3.43, -0.7);
   const hemi = new THREE.HemisphereLight('#eaf0df', '#657367', 1.7); g.add(hemi);
   keyLight(g, '#e9f2dc', 2.1, [-2, 6, 5], [0, 0, -1]);
+  fillLight(g, '#e9f2dc', 1.2, [1, 6, -7], [0, 1, 2]);
   return {
     id: 'hospital', name: 'Hospital Waiting Room', group: g,
     nodes: nodes({ door: [1.2, -3.3], center: [0, -0.4], seats: [-2.8, -1.7], left: [-4, -1.6], side: [-4, 0.5], front: [-2.8, 0.5], reception: [3.6, -1.1], clerk: [3.8, -3.3], coffee: [3.9, 1.3] }),

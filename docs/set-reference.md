@@ -93,7 +93,7 @@ The raycast audit checks frame coverage at 0, 2 and 4 seconds; playback tests co
 | `laser_tag` | Blacklight arena: cyan/pink bases, low cover, barrels, vest rack and scoreboard. |
 | `wesleyan_dorm` | **College, 1996**: Wesleyan bunks, plaid blankets, CRT computer, cassette stereo, posters, records and pizza. |
 | `hospital` | Waiting room: teal chairs, magazines, reception, ward door and coffee machine. |
-| `elevator` | Wood-paneled cabin: steel doors, floor buttons, indicator and handrails. |
+| `elevator` | Small walnut-and-brass cabin (about 2.7 × 2.4 m): steel doors, button panel, floor dial and handrails. |
 | `canadian_mall` | **Canada, 1990**: pastel storefronts, record shop, tiled atrium, planters, Canadian flag and Robin Sparkles performance dais. |
 
 All have named marks, connected walking routes and authored wide shots, with one-sided reverse backdrops

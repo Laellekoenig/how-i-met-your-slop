@@ -1,0 +1,197 @@
+{
+  "code": "S98E01",
+  "title": "The Only By Destiny",
+  "logline": "Ted swears he was smooth when he met Daphne, a whispering sommelier, at MacLaren's. The gang's replays, Robin's news footage and a three-way phone call all disagree, and his worst line turns out to be the one that works.",
+  "guests": [
+    {
+      "id": "guest1",
+      "name": "Daphne",
+      "role": "A sommelier Ted met at the bar. Describes everything, including people, as if it were a wine.",
+      "gender": "female",
+      "height": "average",
+      "build": "slim",
+      "skin": "olive",
+      "hair": "dark_brown",
+      "hairStyle": "waves",
+      "topStyle": "dress",
+      "top": "burgundy",
+      "pants": "black",
+      "extras": ["earrings"],
+      "voice": { "pitch": "medium", "pace": "normal" }
+    }
+  ],
+  "scenes": [
+    {
+      "id": "the-booth",
+      "location": "maclarens",
+      "time": "night",
+      "transition": "cut",
+      "cast": [
+        { "character": "ted", "mark": "booth_end" },
+        { "character": "marshall", "mark": "booth_left_back" },
+        { "character": "lily", "mark": "booth_left_front" },
+        { "character": "robin", "mark": "booth_right_back" },
+        { "character": "barney", "mark": "booth_right_front" }
+      ],
+      "beats": [
+        { "type": "narrate", "line": "In the spring of 2011, I met a sommelier named Daphne. By my own account, I was smooth.", "over": true },
+        { "type": "hold", "character": "ted", "prop": "beer" },
+        { "type": "act", "character": "ted", "gesture": "cheers", "to": "marshall" },
+        { "type": "say", "character": "ted", "to": "robin", "line": "I was smooth. Jazz saxophone smooth.", "emotion": "smug", "shot": "closeup" },
+        { "type": "say", "character": "robin", "to": "barney", "line": "Barney was there. Barney, was he smooth?" },
+        { "type": "say", "character": "barney", "to": "ted", "line": "Ted, I love you, but you were the opposite of smooth. You were chunky.", "laugh": "laugh" },
+        { "type": "say", "character": "ted", "to": "barney", "line": "Fine. Judge for yourselves." },
+        {
+          "type": "cutaway",
+          "id": "meeting",
+          "style": "misremembered",
+          "label": "Last Tuesday",
+          "look": "memory",
+          "transition": "rewind",
+          "location": "maclarens",
+          "time": "night",
+          "cast": [{ "character": "ted", "mark": "bar_stool_2" }, { "character": "guest1", "mark": "bar_stool_3" }],
+          "beats": [
+            { "type": "say", "character": "guest1", "to": "ted", "line": "Is this seat taken?" },
+            { "type": "say", "character": "ted", "to": "guest1", "line": "Only by destiny.", "emotion": "smug", "shot": "two" },
+            { "type": "say", "character": "guest1", "to": "ted", "line": "That is the best thing anyone has ever said to me.", "emotion": "flirty", "laugh": "chuckle" }
+          ]
+        },
+        { "type": "say", "character": "lily", "to": "ted", "line": "Nobody has ever said only by destiny and gotten a phone number.", "laugh": "laugh" },
+        { "type": "say", "character": "barney", "to": "lily", "line": "Because that is not what happened. I was in the booth. Roll it." },
+        {
+          "type": "replay",
+          "of": "meeting",
+          "style": "flashback",
+          "label": "What actually happened",
+          "transition": "whip",
+          "add": [{ "character": "barney", "mark": "booth_end" }],
+          "changes": [
+            { "at": 1, "replace": [{ "type": "say", "character": "ted", "to": "guest1", "line": "Only by... I'm sorry. I'm Ted. I have a cold. Of the voice.", "delivery": "fast", "emotion": "nervous", "laugh": "laugh" }] },
+            { "at": 2, "replace": [{ "type": "say", "character": "guest1", "to": "ted", "line": "Of the voice. That's a bold pairing.", "delivery": "deadpan" }] },
+            { "at": 3, "insert": [{ "type": "act", "character": "barney", "gesture": "facepalm" }] }
+          ]
+        },
+        {
+          "type": "say", "character": "robin", "to": "ted", "line": "A cold. Of the voice.", "delivery": "deadpan", "laugh": "big",
+          "react": [{ "character": "marshall", "gesture": "crack_up" }, { "character": "lily", "gesture": "cover_mouth" }, { "character": "barney", "gesture": "slow_clap" }]
+        },
+        { "type": "say", "character": "ted", "line": "And yet. She took my number.", "emotion": "proud", "shot": "push_in" },
+        { "type": "say", "character": "marshall", "to": "ted", "line": "She did what?", "chorus": ["lily", "robin", "barney"], "emotion": "surprised", "laugh": "laugh" },
+        { "type": "say", "character": "penny", "line": "Is this about Aunt Robin again?" },
+        { "type": "narrate", "line": "No, Penny. For once, it was not about Aunt Robin.", "laugh": "chuckle" },
+        { "type": "say", "character": "ted", "to": "barney", "line": "She's calling me tonight, and when she does, I am going to be so—", "emotion": "excited", "interrupted": true },
+        { "type": "say", "character": "barney", "to": "ted", "line": "Chunky.", "delivery": "deadpan", "laugh": "laugh" }
+      ]
+    },
+    {
+      "location": "apartment",
+      "time": "night",
+      "transition": "skyline",
+      "label": "Three days later",
+      "cast": [
+        { "character": "ted", "mark": "couch_center" },
+        { "character": "marshall", "mark": "armchair" },
+        { "character": "lily", "mark": "couch_right" }
+      ],
+      "beats": [
+        { "type": "narrate", "line": "She did not call that night. Or the next one." },
+        {
+          "type": "montage",
+          "label": "Waiting for Daphne",
+          "music": "melancholy",
+          "shots": [
+            { "location": "apartment", "time": "day", "label": "Day 1", "cast": [{ "character": "ted", "mark": "couch_center" }], "beats": [{ "type": "hold", "character": "ted", "prop": "phone" }] },
+            { "location": "office", "time": "day", "label": "Day 2", "cast": [{ "character": "ted", "mark": "cubicle_2" }], "beats": [{ "type": "say", "character": "ted", "line": "Daphne? No. I don't want a cruise.", "gesture": "phone_call", "emotion": "sad" }] },
+            { "location": "rooftop", "time": "night", "label": "Day 3", "cast": [{ "character": "ted", "mark": "ledge_lookout" }], "beats": [{ "type": "act", "character": "ted", "gesture": "head_in_hands" }] }
+          ]
+        },
+        { "type": "say", "character": "marshall", "to": "ted", "line": "She will call you, buddy, she's just pacing in the hall.", "delivery": "sing", "accompanied": true, "laugh": "chuckle" },
+        { "type": "say", "character": "lily", "to": "ted", "line": "Or she lost her phone, and you'll die alone.", "delivery": "sing", "shot": "wide", "laugh": "big" },
+        { "type": "hold", "character": "ted", "prop": "phone" },
+        { "type": "say", "character": "guest1", "to": "ted", "line": "Ted? It's Daphne. From the bar. With the cold.", "offscreen": "phone" },
+        { "type": "say", "character": "ted", "line": "Daphne! Hi. The cold is gone. Totally gone.", "gesture": "phone_call", "emotion": "excited", "delivery": "fast" },
+        {
+          "type": "split",
+          "panels": [
+            { "location": "apartment", "time": "night", "cast": [{ "character": "ted", "mark": "couch_center" }] },
+            { "location": "restaurant", "time": "night", "cast": [{ "character": "guest1", "mark": "host" }] },
+            { "location": "barneys", "time": "night", "cast": [{ "character": "barney", "mark": "couch_center" }] }
+          ],
+          "beats": [
+            { "type": "say", "character": "guest1", "to": "ted", "line": "So. Dinner, Friday? I'll pick the wine.", "gesture": "phone_call" },
+            { "type": "say", "character": "barney", "to": "ted", "line": "Ted, it's Barney. I'm on the line. Say something smooth.", "gesture": "phone_call", "delivery": "whisper", "laugh": "chuckle" },
+            { "type": "say", "character": "ted", "to": "guest1", "line": "Only by destiny.", "gesture": "phone_call", "emotion": "nervous" },
+            { "type": "say", "character": "guest1", "to": "ted", "line": "Is somebody else on this call?", "gesture": "phone_call", "laugh": "laugh" }
+          ]
+        },
+        { "type": "say", "character": "lily", "to": "ted", "line": "Did you just say only by destiny again?" },
+        { "type": "say", "character": "ted", "to": "lily", "line": "She said yes.", "emotion": "excited" },
+        { "type": "freeze", "character": "ted", "gesture": "fist_pump", "emotion": "excited", "line": "Kids, it worked. To this day, I don't know why it worked.", "laugh": "laugh" },
+        {
+          "type": "cutaway",
+          "style": "prediction",
+          "label": "How Ted pictured Friday",
+          "look": "dream",
+          "transition": "ripple",
+          "location": "restaurant",
+          "time": "night",
+          "cast": [{ "character": "ted", "mark": "table_right" }, { "character": "guest1", "mark": "table_left" }],
+          "beats": [
+            { "type": "say", "character": "ted", "to": "guest1", "line": "Daphne, your eyes have notes of oak.", "delivery": "sing", "emotion": "flirty" },
+            { "type": "say", "character": "guest1", "to": "ted", "line": "Ted, that's beautiful. Sing it again.", "emotion": "flirty", "laugh": "chuckle" }
+          ]
+        },
+        { "type": "say", "character": "marshall", "to": "ted", "line": "You can't sing, Ted.", "delivery": "deadpan", "laugh": "laugh" }
+      ]
+    },
+    {
+      "location": "maclarens",
+      "time": "night",
+      "transition": "exterior",
+      "label": "Thursday",
+      "cast": [
+        { "character": "ted", "mark": "booth_end" },
+        { "character": "robin", "mark": "booth_right_back" },
+        { "character": "marshall", "mark": "booth_left_back" }
+      ],
+      "beats": [
+        { "type": "say", "character": "robin", "to": "ted", "line": "Funny thing. We were shooting a segment at this bar last Tuesday.", "emotion": "smug" },
+        { "type": "hold", "character": "robin", "prop": "videotape" },
+        {
+          "type": "cutaway",
+          "id": "footage",
+          "style": "flashback",
+          "label": "Metro News One, last Tuesday",
+          "look": "video",
+          "location": "maclarens",
+          "time": "night",
+          "cast": [{ "character": "robin", "mark": "center" }, { "character": "ted", "mark": "bar_stool_2" }, { "character": "guest1", "mark": "bar_stool_3" }],
+          "beats": [
+            { "type": "hold", "character": "robin", "prop": "microphone" },
+            { "type": "say", "character": "robin", "to": "ted", "line": "Is romance dead in New York? Sir, your best pickup line?" },
+            { "type": "say", "character": "ted", "to": "robin", "line": "Only by destiny.", "emotion": "smug" },
+            { "type": "freeze", "character": "ted", "emotion": "smug", "line": "This was before I'd even met Daphne. I had been workshopping it." }
+          ]
+        },
+        { "type": "say", "character": "marshall", "to": "ted", "line": "You rehearsed it? On the news?", "emotion": "surprised", "laugh": "laugh" },
+        { "type": "replay", "of": "footage", "from": 1, "to": 3, "look": "video", "label": "Again" },
+        { "type": "say", "character": "ted", "to": "robin", "line": "Okay, that's twice. It's my thing now.", "emotion": "embarrassed", "shot": "two", "laugh": "laugh" }
+      ]
+    },
+    {
+      "location": "restaurant",
+      "time": "night",
+      "transition": "exterior",
+      "label": "Friday",
+      "cast": [{ "character": "guest1", "mark": "table_left" }],
+      "beats": [
+        { "type": "narrate", "line": "On Friday, I walked in determined to say nothing at all about destiny.", "over": true },
+        { "type": "enter", "character": "ted", "to": "table_right" },
+        { "type": "say", "character": "guest1", "to": "ted", "line": "Before you sit down. Is this seat taken?", "emotion": "flirty" },
+        { "type": "say", "character": "ted", "to": "guest1", "line": "By me. Just me. Ted.", "emotion": "nervous", "laugh": "chuckle" },
+        { "type": "say", "character": "guest1", "to": "ted", "line": "Good. Destiny was a bit oaky.", "emotion": "happy", "laugh": "laugh" }
+      ]
+    }
+  ]
+}

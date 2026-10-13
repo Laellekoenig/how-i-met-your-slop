@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cyl, glow, mesh, toon } from '../../engine/materials';
 import { speckle } from '../../engine/textures';
-import { bottles, keyLight, mark, nodes, plant, type StageSet, v3 } from './common';
+import { bottles, fillLight, keyLight, mark, nodes, plant, type StageSet, v3 } from './common';
 import { label } from './furnishings';
 import { interior } from './interior';
 import { beer, rod, roundSeat, roundTable, sconce, venuePattern } from './venueDetails';
@@ -132,6 +132,7 @@ export function buildLustyLeopard(): StageSet {
   sign.userData.cameraBackdrop = true;
   g.add(new THREE.HemisphereLight('#e8b6b8', '#492a40', 1.35));
   keyLight(g, '#ffd2b4', 2.0, [-2, 5, 5], [0, 1, -1]);
+  fillLight(g, '#f6c8c4', 1.3, [1, 5, -7], [0, 1, 2]);
   const pink = new THREE.PointLight('#d05987', 2.3, 8);
   pink.position.set(-4, 2.8, -1);
   g.add(pink);

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { box, cyl, glow, mesh, occluder, roundedBox, toon } from '../../engine/materials';
+import { box, cyl, dressing, glow, mesh, occluder, roundedBox, toon } from '../../engine/materials';
 import { metroNewsBackdrop, metroNewsLogo, monitorScreen, tiles, veneer } from '../../engine/textures';
-import { door, keyLight, mark, nodes, plant, room, type StageSet, v3 } from './common';
+import { door, fillLight, keyLight, mark, nodes, plant, room, type StageSet, v3 } from './common';
 import { chair, label, mug } from './furnishings';
 
 // Reference: Robin's desk in "Come On" (S01E22): sunset Manhattan, wood trim,
@@ -12,7 +12,8 @@ export function buildMetroNewsOne(): StageSet {
   const wood = toon('#ffffff', { map: veneer('#87512f', [4, 1]) });
   const black = toon('#222630');
   const steel = toon('#b1bac0');
-  room(g, { w: 13, d: 8, h: 3.8, floor: toon('#ffffff', { map: tiles('#343940', '#30343a', [10, 8]) }), back: toon('#24364b'), ceiling: '#171d25' });
+  // A broadcast studio is lit flat and bright: a grey floor and mid-blue flats, not a dark stage.
+  room(g, { w: 13, d: 8, h: 3.8, floor: toon('#ffffff', { map: tiles('#4b535e', '#434b56', [10, 8]) }), back: toon('#2a4262'), ceiling: '#252d38' });
 
   // The printed skyline stays at dusk even during daytime broadcasts.
   g.add(mesh(box(8.5, 2.85, 0.12), wood, -0.65, 2.05, -3.92, false));
@@ -52,14 +53,20 @@ export function buildMetroNewsOne(): StageSet {
     c.add(mesh(box(0.62, 0.36, 0.06), black, 0, 1.2, -0.47, false));
     c.add(mesh(new THREE.PlaneGeometry(0.37, 0.25), toon('#ffffff', { map: monitorScreen(152), emissive: '#ffffff', emissiveIntensity: 0.4 }), 0, 1.52, 0.331, false));
     c.add(mesh(box(0.1, 0.045, 0.06), glow('#f74c40'), 0, 1.72, -0.1, false));
-    g.add(c);
+    g.add(dressing(c));
   }
-  for (const x of [-3.7, 0, 3.7]) {
-    g.add(mesh(box(0.7, 0.18, 0.48), black, x, 3.55, -0.6, false));
-    g.add(mesh(box(0.59, 0.025, 0.36), glow('#fff0d5'), x, 3.45, -0.6, false));
+  // The lighting grid: soft boxes over the desk and the floor, all on for the broadcast.
+  for (const [x, z] of [[-3.7, -0.6], [0, -0.6], [3.7, -0.6], [-2.2, 2.2], [2.2, 2.2]]) {
+    g.add(mesh(box(0.7, 0.18, 0.48), black, x, 3.55, z, false));
+    g.add(mesh(box(0.59, 0.025, 0.36), glow('#fff0d5'), x, 3.45, z, false));
+    const l = new THREE.PointLight('#fff2de', 1.3, 7, 1.4);
+    l.position.set(x, 3.3, z);
+    g.add(l);
   }
-  const hemi = new THREE.HemisphereLight('#e8eeff', '#4c342b', 1.6); g.add(hemi);
-  keyLight(g, '#fff0dc', 2.5, [0, 6, 4], [-0.6, 1, -2.4]);
+  const hemi = new THREE.HemisphereLight('#f0f3ff', '#5e5250', 1.8); g.add(hemi);
+  keyLight(g, '#fff3e2', 2.6, [0.5, 6.5, 5], [-0.6, 1, -2.4]);
+  // A fill from the upstage grid for anyone turned toward the desk (the camera operators), and the anchors' backlight.
+  fillLight(g, '#e2eaff', 1.1, [0.5, 5, -7], [0, 1, 2]);
   const N = nodes({ door: [5.05, -3.3], right: [3, -3.42], behind: [-0.65, -3.42], left: [-3.5, -3.42], left_front: [-3.5, -0.5], center: [0, 0], right_front: [2.8, -0.3], camera_side: [4.8, -0.3], camera: [4.8, 1.65] });
   return {
     id: 'metro_news_one', name: 'Metro News One', group: g, nodes: N,
@@ -76,11 +83,11 @@ export function buildMetroNewsOne(): StageSet {
       door: mark(5.05, -3.5, 0, 'door', 'crew entrance beside the ON AIR sign'),
     },
     wides: [
-      { pos: v3(0, 2.3, 8.8), target: v3(0, 1.55, -2.1), fov: 49 },
+      { pos: v3(2.5, 2.0, 8.5), target: v3(0.9, 1.5, -2.2), fov: 34 },
       { pos: v3(-0.65, 1.75, 3.5), target: v3(-0.65, 1.2, -2.5), fov: 46 },
       { pos: v3(-2.5, 1.9, 4.5), target: v3(2.1, 1.35, -2.5), fov: 48 },
     ],
     ambience: 'office', background: [], doorSound: 'none',
-    setTime(t) { hemi.intensity = t === 'day' ? 1.7 : 1.5; },
+    setTime(t) { hemi.intensity = t === 'day' ? 1.9 : 1.8; },
   };
 }

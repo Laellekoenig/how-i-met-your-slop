@@ -67,10 +67,59 @@ const previews = {
     ['ted', 'table_left'],
     ['robin', 'table_right'],
   ],
+  elevator: [
+    ['ted', 'center'],
+    ['robin', 'buttons'],
+    ['barney', 'left'],
+  ],
   lusty_leopard: [
     ['barney', 'table_left'],
     ['quinn', 'table_right'],
     ['ted', 'friend'],
+  ],
+  barneys: [
+    ['barney', 'couch_right'],
+    ['marshall', 'center'],
+    ['ted', 'window'],
+    ['robin', 'kitchen_stool_1'],
+  ],
+  barneys_office: [
+    ['barney', 'desk_chair'],
+    ['marshall', 'guest_chair_left'],
+    ['ted', 'guest_chair_right'],
+  ],
+  rooftop: [
+    ['ted', 'lawn_chair_left'],
+    ['marshall', 'lawn_chair_middle'],
+    ['lily', 'lawn_chair_right'],
+    ['robin', 'ledge_lookout'],
+    ['barney', 'grill'],
+  ],
+  metro_news_one: [
+    ['robin', 'anchor_left'],
+    ['ted', 'anchor_right'],
+    ['lily', 'camera_operator'],
+    ['barney', 'desk_side'],
+  ],
+  store: [
+    ['marshall', 'checkout'],
+    ['lily', 'cashier'],
+    ['ted', 'queue'],
+  ],
+  lecture_hall: [
+    ['ted', 'lectern'],
+    ['robin', 'student_1_3'],
+    ['marshall', 'student_2_2'],
+  ],
+  hospital: [
+    ['ted', 'reception'],
+    ['lily', 'receptionist'],
+    ['marshall', 'seat_left'],
+  ],
+  canadian_mall: [
+    ['robin', 'stage'],
+    ['ted', 'audience'],
+    ['barney', 'friend'],
   ],
 } as const satisfies Partial<Record<LocationId, readonly (readonly [CharacterId, string])[]>>;
 const cityPreviews = {

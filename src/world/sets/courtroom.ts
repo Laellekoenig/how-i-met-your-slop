@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cyl, mesh, toon } from '../../engine/materials';
 import { checker, paneling } from '../../engine/textures';
-import { keyLight, mark, nodes, type StageSet, v3 } from './common';
+import { fillLight, keyLight, mark, nodes, type StageSet, v3 } from './common';
 import { chair, label } from './furnishings';
 import { interior, table } from './interior';
 import { sconce, venuePattern } from './venueDetails';
@@ -108,6 +108,7 @@ export function buildCourtroom(): StageSet {
   }
   g.add(new THREE.HemisphereLight('#e6d9bd', '#665343', 1.7));
   keyLight(g, '#fff0d3', 2.7, [-5, 8, 4], [0, 1, -2]);
+  fillLight(g, '#fff0d3', 1.2, [1, 8, -8], [0, 1, 2]);
   return {
     id: 'courtroom',
     name: 'New York Courtroom',

@@ -4,9 +4,10 @@ import { testStage } from './helpers/sets';
 import { walkingBlockers } from './helpers/geometry';
 import type { Actor } from '../src/world/actor';
 import type { LocationId } from '../src/script/types';
+import { Door, SlidingDoor } from '../src/world/sets/common';
 
 const stage = testStage();
-const hinged = Object.values(stage.sets).filter(s => s.doors).map(s => s.id);
+const hinged = Object.values(stage.sets).filter(s => Object.values(s.doors ?? {}).some(d => d instanceof Door)).map(s => s.id);
 
 /** Run the stage a frame at a time, letting the door work's promises settle between frames as they would. */
 async function play(seconds: number, each?: () => void) {
@@ -134,5 +135,74 @@ describe('doors on hinges', () => {
     stage.actors.lily.arrive();
     expect(stage.markOf('lily')).toBe('center');
     expect(stage.current.doors!.door.angle).toBe(0);
+  });
+});
+
+describe('a lift\'s sliding doors', () => {
+  /** Watch someone through the doors: how far open they are at the least while that person is in the doorway (their
+   *  middle within a body's width of the wall), and how often the doors chime open and close. */
+  function watch(id: 'ted' | 'robin' | 'lily') {
+    const doors = stage.current.doors!.door as SlidingDoor;
+    const wall = doors.getWorldPosition(new THREE.Vector3()).z;
+    const seen = { passing: Infinity, opened: 0, shut: 0 };
+    stage.onDoorOpen = () => { seen.opened++; };
+    stage.onDoorShut = () => { seen.shut++; };
+    const each = () => {
+      const a = stage.actors[id];
+      if (a.root.visible && Math.abs(a.position.z - wall) < 0.3) seen.passing = Math.min(seen.passing, doors.open);
+    };
+    return { doors, seen, each };
+  }
+
+  test('the elevator has a pair of them on its way in, shut to begin with', () => {
+    stage.setLocation('elevator', 'night');
+    expect(stage.current.doors!.door).toBeInstanceOf(SlidingDoor);
+    expect(stage.liftDoors).toBe(true);
+    expect((stage.current.doors!.door as SlidingDoor).open).toBe(0);
+  });
+
+  test('in: they slide open as the chime goes, the newcomer steps through, and they slide shut behind', async () => {
+    stage.setLocation('elevator', 'night');
+    stage.place('ted', 'left');
+    const { doors, seen, each } = watch('robin');
+    let arrived = false;
+    void stage.enter('robin', 'buttons').then(() => { arrived = true; });
+    expect(seen.opened).toBe(1);
+    await play(8, each);
+    expect(arrived).toBe(true);
+    expect(stage.markOf('robin')).toBe('buttons');
+    expect(seen.passing).toBeLessThan(Infinity);
+    expect(seen.passing).toBeGreaterThan(0.95);
+    expect(doors.open).toBeLessThan(0.01);
+    expect(seen).toMatchObject({ opened: 1, shut: 1 });
+  });
+
+  test('out: they slide open, the leaver steps out onto the landing, and they slide shut before they\'re gone', async () => {
+    stage.setLocation('elevator', 'night');
+    stage.place('ted', 'center');
+    stage.place('robin', 'right');
+    const { doors, seen, each } = watch('ted');
+    let gone = false, shutFirst = false;
+    void stage.exit('ted').then(() => { gone = true; shutFirst = doors.open < 0.01; });
+    await play(10, each);
+    expect(gone).toBe(true);
+    expect(stage.onStage('ted')).toBe(false);
+    expect(seen.passing).toBeLessThan(Infinity);
+    expect(seen.passing).toBeGreaterThan(0.95);
+    expect(shutFirst).toBe(true);
+    expect(seen).toMatchObject({ opened: 1, shut: 1 });
+  });
+
+  test('two coming in together come through one opening of the doors', async () => {
+    stage.setLocation('elevator', 'day');
+    const { doors, seen } = watch('robin');
+    let arrived = 0;
+    for (const [id, mark] of [['robin', 'left'], ['lily', 'right']] as const) void stage.enter(id, mark).then(() => arrived++);
+    await play(10);
+    expect(arrived).toBe(2);
+    expect(stage.markOf('robin')).toBe('left');
+    expect(stage.markOf('lily')).toBe('right');
+    expect(doors.open).toBeLessThan(0.01);
+    expect(seen).toMatchObject({ opened: 1, shut: 1 });
   });
 });

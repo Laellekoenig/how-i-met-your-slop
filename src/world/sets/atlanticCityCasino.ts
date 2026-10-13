@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cyl, glow, mesh, roundedBox, toon } from '../../engine/materials';
 import { speckle } from '../../engine/textures';
-import { keyLight, mark, nodes, type StageSet, v3 } from './common';
+import { fillLight, keyLight, mark, nodes, type StageSet, v3 } from './common';
 import { label } from './furnishings';
 import { interior } from './interior';
 import { roundSeat, sconce, venuePattern } from './venueDetails';
@@ -122,6 +122,8 @@ export function buildAtlanticCityCasino(): StageSet {
   reversePanel(0, 0.89, 2.35, 0.08, gold);
   g.add(new THREE.HemisphereLight('#e1bb99', '#503047', 1.5));
   keyLight(g, '#ffe1b7', 2.5, [-3, 7, 5], [0, 1, -1]);
+  // the players face the dealer, away from the key: the reverse from behind the chip rack needs its own light
+  fillLight(g, '#ffd9b4', 1.9, [1, 6, -7], [0, 1, 2]);
   const accent = new THREE.PointLight('#bc75ab', 3, 10);
   accent.position.set(4, 3, -3);
   g.add(accent);

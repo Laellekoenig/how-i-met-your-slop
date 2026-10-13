@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, glow, box, mesh, roundedBox, cyl, occluder } from '../../engine/materials';
+import { toon, glow, box, mesh, roundedBox, cyl, occluder, dressing } from '../../engine/materials';
 import { skyline, speckle, poster, veneer, tufted, type PosterArt } from '../../engine/textures';
 import { type StageSet, mark, nodes, door, bottles, keyLight, v3 } from './common';
 
@@ -59,7 +59,7 @@ export function buildBarneysOffice(): StageSet {
     ['PERFECTION', 'jets', -3.3, 2.4, false],
     ['AWESOMENESS', 'jet', -2.3, 2.4, false],
     ['LEAD WITH VISION', 'propeller', -1.15, 2.44, true],
-    ['STRENGTH', 'column', 0.15, 2.0, false],
+    ['STRENGTH', 'column', 0.85, 2.0, false],
     ['CHALLENGE', 'climber', -5.4, 1.45, false],
     ['TEAMWORK', 'hands', -4.5, 1.45, false],
     ['SUCCESS', 'skydivers', -3.6, 1.45, false],
@@ -114,17 +114,21 @@ export function buildBarneysOffice(): StageSet {
   bottles(g, BC - 0.35, 0.315, BCZ, 3, 0.14, 0, 81);
 
   // ---- the palm --------------------------------------------------------------------------------------
-  const PX = 0.85, PZ = BACK + 0.45;
-  g.add(mesh(cyl(0.22, 0.17, 0.45, 8), toon('#2a2a2c'), PX, 0.225, PZ));
+  // (beside the bar cart, well clear of the window, so a single of someone at the window isn't shot through it)
+  const PX = 0.05, PZ = BACK + 0.45;
+  const palm = new THREE.Group();
+  g.add(palm);
+  palm.add(mesh(cyl(0.22, 0.17, 0.45, 8), toon('#2a2a2c'), PX, 0.225, PZ));
   const frond = toon('#3a7a3a');
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2;
     const len = 0.7 + (i % 3) * 0.2;
     const f = mesh(box(0.1, len, 0.015), frond, PX + Math.cos(a) * 0.18, 1.2 + (i % 3) * 0.35, PZ + Math.sin(a) * 0.18, false);
     f.rotation.set(Math.sin(a) * 0.7, -a, -Math.cos(a) * 0.7);
-    g.add(f);
+    palm.add(f);
   }
-  for (let i = 0; i < 3; i++) g.add(mesh(cyl(0.02, 0.025, 1.4 + i * 0.3, 4), toon('#5a4a2a'), PX + (i - 1) * 0.05, 0.45 + (0.7 + i * 0.15), PZ, false));
+  for (let i = 0; i < 3; i++) palm.add(mesh(cyl(0.02, 0.025, 1.4 + i * 0.3, 4), toon('#5a4a2a'), PX + (i - 1) * 0.05, 0.45 + (0.7 + i * 0.15), PZ, false));
+  dressing(palm);
 
   // ---- the window: city beyond, silver vertical blinds ---------------------------------------------------
   const nightSky = toon('#ffffff', { map: skyline(true, 33), emissive: '#ffffff', emissiveIntensity: 0.9 });
@@ -281,7 +285,7 @@ export function buildBarneysOffice(): StageSet {
       couch_right: mark(SX + 0.52, SZ + 0.12, 0, 'sofa', 'the black leather sofa under the window, right cushion', { seat: 0.48, approach: [SX + 0.52, SZ + 0.8], depth: 0.31 }),
       posters: mark(-4.6, -2.25, Math.PI + 0.55, 'posters', 'admiring the wall of motivational posters (CONFORMITY, TEAMWORK, AWESOMENESS...)'),
       bar_cart: mark(BC, BACK + 1.0, Math.PI - 0.5, 'behind', 'at the chrome bar cart under the posters, pouring scotch'),
-      window: mark(1.25, BACK + 0.5, Math.PI - 0.4, 'win', 'at the window, peeking through the vertical blinds'),
+      window: mark(1.65, BACK + 0.5, Math.PI - 0.4, 'win', 'at the window, peeking through the vertical blinds'),
       center: mark(0.4, 0.5, -0.2, 'center', 'middle of the office'),
       door: mark(RIGHT - 0.4, DOOR_Z, -Math.PI / 2, 'door', 'the office door, downstage on the right wall'),
     },
@@ -298,8 +302,8 @@ export function buildBarneysOffice(): StageSet {
       const night = t === 'night';
       backdrop.material = night ? nightSky : daySky;
       slats.forEach((sl, i) => (sl.material = (night ? slatNight : slatDay)[i % 2]));
-      hemi.intensity = night ? 1.3 : 1.9;
-      key.intensity = night ? 1.4 : 2.0;
+      hemi.intensity = night ? 1.55 : 1.9;
+      key.intensity = night ? 1.65 : 2.0;
       windowLight.color.set(night ? '#7a9aff' : '#fff4e0');
       windowLight.intensity = night ? 1.5 : 4;
       for (const l of cubeLamps) l.intensity = night ? 2.2 : 1.2;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cyl, mesh, toon } from '../../engine/materials';
 import { tiles } from '../../engine/textures';
-import { keyLight, mark, nodes, plant, type StageSet, v3 } from './common';
+import { fillLight, keyLight, mark, nodes, plant, type StageSet, v3 } from './common';
 import { label } from './furnishings';
 import { ceilingPanel, interior } from './interior';
 
@@ -88,6 +88,7 @@ export function buildCanadianMall(): StageSet {
   for (const x of [-5, 0, 5]) ceilingPanel(g, x, 5.23, 0, 2.5, 2);
   const hemi = new THREE.HemisphereLight('#f2e7d4', '#848177', 1.85); g.add(hemi);
   keyLight(g, '#ffe6cd', 2.5, [-4, 8, 5], [0, 0, -1]);
+  fillLight(g, '#ffe6cd', 1.1, [1, 7, -8], [0, 1, 2]);
   return {
     id: 'canadian_mall', name: 'Canadian Mall · 1990', group: g,
     nodes: nodes({ door: [6, -3.7], back: [0, -3.8], back_left: [-3.8, -3.8], left: [-3.8, -1], right: [3.8, -1], stage: [0, -1.5], front: [0, 1.7], bench_left: [-5.9, 1.85], bench_right: [5.9, 1.85], directory: [3.4, 2.8], front_right: [5.9, 2.8] }),
